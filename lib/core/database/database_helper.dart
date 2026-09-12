@@ -37,30 +37,49 @@ class DatabaseHelper {
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         AppLogger.info('Upgrading database version from $oldVersion to $newVersion...');
-        await db.execute('DROP TABLE IF EXISTS sync_queue');
-        await db.execute('DROP TABLE IF EXISTS patient_insurance');
-        await db.execute('DROP TABLE IF EXISTS insurance_companies');
-        await db.execute('DROP TABLE IF EXISTS audit_log');
-        await db.execute('DROP TABLE IF EXISTS settings');
-        await db.execute('DROP TABLE IF EXISTS services');
-        await db.execute('DROP TABLE IF EXISTS medicines');
-        await db.execute('DROP TABLE IF EXISTS clinics');
-        await db.execute('DROP TABLE IF EXISTS patient_attachments');
-        await db.execute('DROP TABLE IF EXISTS lab_results');
-        await db.execute('DROP TABLE IF EXISTS prescription_items');
-        await db.execute('DROP TABLE IF EXISTS prescriptions');
-        await db.execute('DROP TABLE IF EXISTS invoices');
-        await db.execute('DROP TABLE IF EXISTS appointments');
-        await db.execute('DROP TABLE IF EXISTS shifts');
-        await db.execute('DROP TABLE IF EXISTS inventory');
-        await db.execute('DROP TABLE IF EXISTS patients');
-        await db.execute('DROP TABLE IF EXISTS users');
-        await _createDB(db, newVersion);
+        await _onUpgradeMigration(db, oldVersion, newVersion);
       },
     );
 
     await _checkAndSeedUsersIfEmpty(db);
     return db;
+  }
+
+  Future<void> _onUpgradeMigration(Database db, int oldVersion, int newVersion) async {
+    // 1. Create new tables if not exists
+    await _createTables(db);
+
+    // 2. Non-destructive column addition for existing old tables
+    final oldTables = [
+      'users',
+      'shifts',
+      'patients',
+      'appointments',
+      'prescriptions',
+      'prescription_items',
+      'invoices',
+      'inventory',
+      'lab_results',
+      'patient_attachments'
+    ];
+
+    for (var table in oldTables) {
+      try {
+        await db.execute('ALTER TABLE $table ADD COLUMN clinic_id INTEGER DEFAULT 1');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE $table ADD COLUMN updated_at TEXT');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE $table ADD COLUMN is_deleted INTEGER DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE $table ADD COLUMN last_synced_at TEXT');
+      } catch (_) {}
+    }
+
+    // 3. Create Indexes
+    await _createIndexes(db);
   }
 
   Future<void> _checkAndSeedUsersIfEmpty(Database db) async {
@@ -72,172 +91,14 @@ class DatabaseHelper {
   }
 
   Future<void> _createDB(Database db, int version) async {
-    AppLogger.info('Creating SQLite tables...');
+    AppLogger.info('Creating SQLite tables and indexes...');
+    await _createTables(db);
+    await _createIndexes(db);
+    await _seedInitialData(db);
+  }
 
-    // 1. Users Table
-    await db.execute('''
-      CREATE TABLE users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        full_name TEXT NOT NULL,
-        role TEXT NOT NULL,
-        branch TEXT DEFAULT 'جميع الفروع (سوبر أدمن)',
-        permissions_json TEXT NOT NULL,
-        is_active INTEGER NOT NULL DEFAULT 1
-      )
-    ''');
-
-    // 2. Shifts Table
-    await db.execute('''
-      CREATE TABLE shifts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        start_time TEXT NOT NULL,
-        end_time TEXT,
-        starting_cash REAL NOT NULL,
-        ending_cash REAL DEFAULT 0.0,
-        is_closed INTEGER NOT NULL DEFAULT 0,
-        notes TEXT,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // 3. Patients Table
-    await db.execute('''
-      CREATE TABLE patients (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        national_id TEXT,
-        age INTEGER,
-        gender TEXT,
-        medical_history TEXT,
-        allergies TEXT,
-        dob TEXT,
-        blood_group TEXT DEFAULT 'غير محدد',
-        female_status TEXT DEFAULT 'طبيعي',
-        emergency_phone TEXT,
-        contract_entity TEXT DEFAULT 'نقدي (خاص)',
-        chronic_diseases TEXT,
-        created_at TEXT NOT NULL
-      )
-    ''');
-
-    // 4. Appointments Table
-    await db.execute('''
-      CREATE TABLE appointments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL,
-        shift_id INTEGER NOT NULL,
-        appointment_date TEXT NOT NULL,
-        time_slot TEXT NOT NULL,
-        type TEXT NOT NULL,
-        status TEXT NOT NULL,
-        fee REAL DEFAULT 0.0,
-        doctor_name TEXT,
-        notes TEXT,
-        priority TEXT DEFAULT 'عادي',
-        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-        FOREIGN KEY (shift_id) REFERENCES shifts (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // 5. Prescriptions Table
-    await db.execute('''
-      CREATE TABLE prescriptions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        appointment_id INTEGER,
-        patient_id INTEGER NOT NULL,
-        doctor_id INTEGER NOT NULL,
-        diagnosis TEXT NOT NULL,
-        notes TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
-        FOREIGN KEY (doctor_id) REFERENCES users (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // 6. Prescription Items Table
-    await db.execute('''
-      CREATE TABLE prescription_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        prescription_id INTEGER NOT NULL,
-        medicine_name TEXT NOT NULL,
-        dosage TEXT NOT NULL,
-        frequency TEXT NOT NULL,
-        duration TEXT NOT NULL,
-        FOREIGN KEY (prescription_id) REFERENCES prescriptions (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // 7. Invoices Table
-    await db.execute('''
-      CREATE TABLE invoices (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL,
-        shift_id INTEGER NOT NULL,
-        total_amount REAL NOT NULL,
-        discount REAL DEFAULT 0.0,
-        paid_amount REAL NOT NULL,
-        payment_method TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-        FOREIGN KEY (shift_id) REFERENCES shifts (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // 8. Inventory Table
-    await db.execute('''
-      CREATE TABLE inventory (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        item_name TEXT NOT NULL,
-        barcode TEXT,
-        category TEXT DEFAULT 'مستلزمات عامة',
-        lot_number TEXT,
-        quantity INTEGER NOT NULL DEFAULT 0,
-        min_threshold INTEGER NOT NULL DEFAULT 10,
-        unit_price REAL NOT NULL DEFAULT 0.0,
-        expiry_date TEXT,
-        storage_condition TEXT DEFAULT 'درجة حرارة الغرفة 20-25°C',
-        unit_measure TEXT DEFAULT 'عبوة',
-        supplier_name TEXT
-      )
-    ''');
-
-    // 9. Lab Results Table
-    await db.execute('''
-      CREATE TABLE lab_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER NOT NULL,
-        test_name TEXT NOT NULL,
-        test_date TEXT NOT NULL,
-        measured_value TEXT NOT NULL,
-        unit TEXT NOT NULL,
-        reference_range TEXT NOT NULL,
-        status TEXT NOT NULL,
-        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // 10. Patient Attachments Table
-    await db.execute('''
-      CREATE TABLE patient_attachments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER NOT NULL,
-        file_name TEXT NOT NULL,
-        file_type TEXT NOT NULL,
-        file_path TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
-      )
-    ''');
-
-    // 11. Clinics Table (Multi-tenant)
+  Future<void> _createTables(Database db) async {
+    // 1. Clinics Table (Multi-tenant)
     await db.execute('''
       CREATE TABLE IF NOT EXISTS clinics (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -256,11 +117,230 @@ class DatabaseHelper {
       )
     ''');
 
+    // 2. Users Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        full_name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        branch TEXT DEFAULT 'جميع الفروع (سوبر أدمن)',
+        permissions_json TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 3. Shifts Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS shifts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        user_id INTEGER NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT,
+        starting_cash REAL NOT NULL,
+        ending_cash REAL DEFAULT 0.0,
+        is_closed INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 4. Patients Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS patients (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        national_id TEXT,
+        age INTEGER,
+        gender TEXT,
+        medical_history TEXT,
+        allergies TEXT,
+        dob TEXT,
+        blood_group TEXT DEFAULT 'غير محدد',
+        female_status TEXT DEFAULT 'طبيعي',
+        emergency_phone TEXT,
+        contract_entity TEXT DEFAULT 'نقدي (خاص)',
+        chronic_diseases TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 5. Appointments Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS appointments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        patient_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        shift_id INTEGER NOT NULL,
+        appointment_date TEXT NOT NULL,
+        time_slot TEXT NOT NULL,
+        type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        fee REAL DEFAULT 0.0,
+        doctor_name TEXT,
+        notes TEXT,
+        priority TEXT DEFAULT 'عادي',
+        created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (shift_id) REFERENCES shifts (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 6. Prescriptions Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS prescriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        appointment_id INTEGER,
+        patient_id INTEGER NOT NULL,
+        doctor_id INTEGER NOT NULL,
+        diagnosis TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
+        FOREIGN KEY (doctor_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 7. Prescription Items Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS prescription_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        prescription_id INTEGER NOT NULL,
+        medicine_name TEXT NOT NULL,
+        dosage TEXT NOT NULL,
+        frequency TEXT NOT NULL,
+        duration TEXT NOT NULL,
+        created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (prescription_id) REFERENCES prescriptions (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 8. Invoices Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        patient_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        shift_id INTEGER NOT NULL,
+        total_amount REAL NOT NULL,
+        discount REAL DEFAULT 0.0,
+        paid_amount REAL NOT NULL,
+        payment_method TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (shift_id) REFERENCES shifts (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 9. Inventory Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS inventory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        item_name TEXT NOT NULL,
+        barcode TEXT,
+        category TEXT DEFAULT 'مستلزمات عامة',
+        lot_number TEXT,
+        quantity INTEGER NOT NULL DEFAULT 0,
+        min_threshold INTEGER NOT NULL DEFAULT 10,
+        unit_price REAL NOT NULL DEFAULT 0.0,
+        expiry_date TEXT,
+        storage_condition TEXT DEFAULT 'درجة حرارة الغرفة 20-25°C',
+        unit_measure TEXT DEFAULT 'عبوة',
+        supplier_name TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 10. Lab Results Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS lab_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        patient_id INTEGER NOT NULL,
+        test_name TEXT NOT NULL,
+        test_date TEXT NOT NULL,
+        measured_value TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        reference_range TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 11. Patient Attachments Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS patient_attachments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        patient_id INTEGER NOT NULL,
+        file_name TEXT NOT NULL,
+        file_type TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
+      )
+    ''');
+
     // 12. Medicines Table
     await db.execute('''
       CREATE TABLE IF NOT EXISTS medicines (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clinic_id INTEGER,
+        clinic_id INTEGER DEFAULT 1,
         trade_name TEXT NOT NULL,
         scientific_name TEXT,
         category TEXT,
@@ -272,6 +352,8 @@ class DatabaseHelper {
         is_active INTEGER DEFAULT 1,
         created_at TEXT,
         updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
         FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
       )
     ''');
@@ -280,7 +362,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS services (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clinic_id INTEGER,
+        clinic_id INTEGER DEFAULT 1,
         name TEXT NOT NULL,
         category TEXT,
         price REAL NOT NULL,
@@ -288,6 +370,8 @@ class DatabaseHelper {
         is_active INTEGER DEFAULT 1,
         created_at TEXT,
         updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
         FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
       )
     ''');
@@ -296,7 +380,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clinic_id INTEGER,
+        clinic_id INTEGER DEFAULT 1,
         key TEXT NOT NULL,
         value TEXT,
         updated_at TEXT,
@@ -309,7 +393,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS audit_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clinic_id INTEGER,
+        clinic_id INTEGER DEFAULT 1,
         user_id INTEGER,
         action TEXT NOT NULL,
         table_name TEXT NOT NULL,
@@ -326,7 +410,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS insurance_companies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clinic_id INTEGER,
+        clinic_id INTEGER DEFAULT 1,
         name TEXT NOT NULL,
         contact_person TEXT,
         phone TEXT,
@@ -335,6 +419,8 @@ class DatabaseHelper {
         is_active INTEGER DEFAULT 1,
         created_at TEXT,
         updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
         FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
       )
     ''');
@@ -351,6 +437,9 @@ class DatabaseHelper {
         coverage_percentage REAL,
         is_active INTEGER DEFAULT 1,
         created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        last_synced_at TEXT,
         FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
         FOREIGN KEY (insurance_company_id) REFERENCES insurance_companies(id) ON DELETE CASCADE
       )
@@ -360,7 +449,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clinic_id INTEGER,
+        clinic_id INTEGER DEFAULT 1,
         table_name TEXT NOT NULL,
         record_id INTEGER NOT NULL,
         operation TEXT NOT NULL,
@@ -371,15 +460,52 @@ class DatabaseHelper {
         synced_at TEXT
       )
     ''');
+  }
 
-
-    // Seed default admin and initial sample data
-    await _seedInitialData(db);
+  Future<void> _createIndexes(Database db) async {
+    AppLogger.info('Creating database indexes...');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_patients_clinic ON patients (clinic_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_clinic_date ON appointments (clinic_id, appointment_date)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_clinic_date ON invoices (clinic_id, created_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_patients_national_id ON patients (national_id)');
   }
 
   Future<void> _seedInitialData(Database db) async {
-    AppLogger.info('Seeding initial system users...');
+    AppLogger.info('Seeding initial default clinic, settings, and users...');
+    final nowStr = DateTime.now().toIso8601String();
 
+    // 1. Seed Default Clinic "عيادتي" (id = 1)
+    final clinicCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM clinics WHERE id = 1');
+    final clinicCount = clinicCountRes.isNotEmpty ? (clinicCountRes.first['count'] as int? ?? 0) : 0;
+    if (clinicCount == 0) {
+      await db.insert('clinics', {
+        'id': 1,
+        'name': 'عيادتي',
+        'address': 'الفرع الرئيسي',
+        'phone': '01000000000',
+        'currency': 'EGP',
+        'subscription_plan': 'starter',
+        'is_active': 1,
+        'created_at': nowStr,
+        'updated_at': nowStr,
+      });
+    }
+
+    // 2. Seed Default Settings
+    final settingsKeys = [
+      {'key': 'currency', 'value': 'EGP'},
+      {'key': 'language', 'value': 'ar'},
+      {'key': 'working_hours', 'value': '09:00 - 21:00'},
+    ];
+    for (var setting in settingsKeys) {
+      await db.rawInsert('''
+        INSERT OR IGNORE INTO settings (clinic_id, key, value, updated_at)
+        VALUES (1, ?, ?, ?)
+      ''', [setting['key'], setting['value'], nowStr]);
+    }
+
+    // 3. Seed Default System Users (mo_hassan and dr_hassan)
     final allPermissions = jsonEncode([
       'dashboard',
       'appointments',
@@ -400,29 +526,43 @@ class DatabaseHelper {
       'consultation',
     ]);
 
-    // 1. Super Admin User
-    await db.insert('users', {
-      'username': 'mo_hassan',
-      'password': '123456',
-      'full_name': 'mohamed hassan',
-      'role': 'admin',
-      'branch': 'جميع الفروع (سوبر أدمن)',
-      'permissions_json': allPermissions,
-      'is_active': 1,
-    });
+    // Super Admin User
+    final adminCount = Sqflite.firstIntValue(
+      await db.rawQuery("SELECT COUNT(*) FROM users WHERE username = 'mo_hassan'"),
+    ) ?? 0;
+    if (adminCount == 0) {
+      await db.insert('users', {
+        'clinic_id': 1,
+        'username': 'mo_hassan',
+        'password': '123456',
+        'full_name': 'mohamed hassan',
+        'role': 'admin',
+        'branch': 'جميع الفروع (سوبر أدمن)',
+        'permissions_json': allPermissions,
+        'is_active': 1,
+        'created_at': nowStr,
+      });
+    }
 
-    // 2. Doctor User
-    await db.insert('users', {
-      'username': 'dr_hassan',
-      'password': '123456',
-      'full_name': 'د. محمد حسن (طبيب معالج)',
-      'role': 'doctor',
-      'branch': 'فرع السلام (الرئيسي)',
-      'permissions_json': doctorPermissions,
-      'is_active': 1,
-    });
+    // Doctor User
+    final doctorCount = Sqflite.firstIntValue(
+      await db.rawQuery("SELECT COUNT(*) FROM users WHERE username = 'dr_hassan'"),
+    ) ?? 0;
+    if (doctorCount == 0) {
+      await db.insert('users', {
+        'clinic_id': 1,
+        'username': 'dr_hassan',
+        'password': '123456',
+        'full_name': 'د. محمد حسن (طبيب معالج)',
+        'role': 'doctor',
+        'branch': 'فرع السلام (الرئيسي)',
+        'permissions_json': doctorPermissions,
+        'is_active': 1,
+        'created_at': nowStr,
+      });
+    }
 
-    AppLogger.info('Database seeded successfully with initial users mo_hassan and dr_hassan.');
+    AppLogger.info('Database seeded successfully with clinic "عيادتي", default settings, and initial users mo_hassan & dr_hassan.');
   }
 
   Future<void> close() async {
