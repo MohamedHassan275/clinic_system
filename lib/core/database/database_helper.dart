@@ -30,13 +30,21 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         AppLogger.info('Upgrading database version from $oldVersion to $newVersion...');
+        await db.execute('DROP TABLE IF EXISTS sync_queue');
+        await db.execute('DROP TABLE IF EXISTS patient_insurance');
+        await db.execute('DROP TABLE IF EXISTS insurance_companies');
+        await db.execute('DROP TABLE IF EXISTS audit_log');
+        await db.execute('DROP TABLE IF EXISTS settings');
+        await db.execute('DROP TABLE IF EXISTS services');
+        await db.execute('DROP TABLE IF EXISTS medicines');
+        await db.execute('DROP TABLE IF EXISTS clinics');
         await db.execute('DROP TABLE IF EXISTS patient_attachments');
         await db.execute('DROP TABLE IF EXISTS lab_results');
         await db.execute('DROP TABLE IF EXISTS prescription_items');
@@ -228,6 +236,142 @@ class DatabaseHelper {
         FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
       )
     ''');
+
+    // 11. Clinics Table (Multi-tenant)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS clinics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        address TEXT,
+        phone TEXT,
+        email TEXT,
+        logo_path TEXT,
+        currency TEXT DEFAULT 'EGP',
+        subscription_plan TEXT DEFAULT 'starter',
+        subscription_start TEXT,
+        subscription_expiry TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    // 12. Medicines Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS medicines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER,
+        trade_name TEXT NOT NULL,
+        scientific_name TEXT,
+        category TEXT,
+        default_dosage TEXT,
+        default_frequency TEXT,
+        default_duration TEXT,
+        notes TEXT,
+        is_favorite INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 13. Services Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS services (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER,
+        name TEXT NOT NULL,
+        category TEXT,
+        price REAL NOT NULL,
+        duration_minutes INTEGER,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 14. Settings Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER,
+        key TEXT NOT NULL,
+        value TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        UNIQUE(clinic_id, key)
+      )
+    ''');
+
+    // 15. Audit Log Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER,
+        user_id INTEGER,
+        action TEXT NOT NULL,
+        table_name TEXT NOT NULL,
+        record_id INTEGER,
+        old_value TEXT,
+        new_value TEXT,
+        created_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    ''');
+
+    // 16. Insurance Companies Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS insurance_companies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER,
+        name TEXT NOT NULL,
+        contact_person TEXT,
+        phone TEXT,
+        email TEXT,
+        discount_percentage REAL,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 17. Patient Insurance Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS patient_insurance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        insurance_company_id INTEGER NOT NULL,
+        policy_number TEXT,
+        card_number TEXT,
+        expiry_date TEXT,
+        coverage_percentage REAL,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (insurance_company_id) REFERENCES insurance_companies(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 18. Sync Queue Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER,
+        table_name TEXT NOT NULL,
+        record_id INTEGER NOT NULL,
+        operation TEXT NOT NULL,
+        payload TEXT,
+        status TEXT DEFAULT 'pending',
+        retry_count INTEGER DEFAULT 0,
+        created_at TEXT,
+        synced_at TEXT
+      )
+    ''');
+
 
     // Seed default admin and initial sample data
     await _seedInitialData(db);
