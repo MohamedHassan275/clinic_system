@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/common/widgets/app_dialog.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/enums/appointment_enums.dart';
+import '../../../../core/enums/user_role.dart';
 import '../../../../core/responsive/responsive_layout.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../../core/security/shift_guard.dart';
@@ -60,7 +61,24 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   }
 
   List<Map<String, dynamic>> _getFilteredAppointments() {
-    final list = _viewModel.clinicCubit.appointments;
+    var list = _viewModel.clinicCubit.appointments;
+
+    // Role-based filtering: Doctor sees only their appointments, Secretary/Admin sees all
+    final currentUser = SessionManager.instance.currentUser;
+    if (currentUser != null) {
+      final userRole = UserRole.fromString(currentUser['role'] as String?);
+      if (userRole == UserRole.doctor) {
+        final currentUserId = currentUser['id'];
+        final currentUserName = currentUser['full_name'];
+        list = list.where((a) {
+          final doctorId = a['user_id'];
+          final doctorName = a['doctor_name'];
+          return (doctorId != null && doctorId == currentUserId) ||
+                 (doctorName != null && doctorName == currentUserName);
+        }).toList();
+      }
+    }
+
     if (_selectedStatusFilter == 'all') return list;
 
     return list.where((a) {
