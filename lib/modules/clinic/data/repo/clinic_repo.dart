@@ -19,6 +19,8 @@ abstract class ClinicRepo {
   // EMR & Patients
   Future<Either<Failure, List<Map<String, dynamic>>>> getPatients({String? query});
   Future<Either<Failure, int>> addPatient(Map<String, dynamic> patient);
+  Future<Either<Failure, void>> updatePatient(Map<String, dynamic> patient);
+  Future<Either<Failure, void>> deletePatient(int patientId);
   Future<Either<Failure, Map<String, dynamic>>> getPatientFullMedicalRecord(int patientId);
 
   // Prescriptions
@@ -166,8 +168,8 @@ class ClinicRepoImpl implements ClinicRepo {
       String sql = 'SELECT * FROM patients';
       List<dynamic> args = [];
       if (query != null && query.isNotEmpty) {
-        sql += ' WHERE name LIKE ? OR phone LIKE ? OR national_id LIKE ?';
-        args = ['%$query%', '%$query%', '%$query%'];
+        sql += ' WHERE name LIKE ? OR phone LIKE ? OR national_id LIKE ? OR contract_entity LIKE ?';
+        args = ['%$query%', '%$query%', '%$query%', '%$query%'];
       }
       sql += ' ORDER BY id DESC';
       final res = await db.rawQuery(sql, args);
@@ -185,6 +187,29 @@ class ClinicRepoImpl implements ClinicRepo {
       return Right(id);
     } catch (e) {
       return Left(Failure(500, 'فشل إضافة المريض: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updatePatient(Map<String, dynamic> patient) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final int id = patient['id'];
+      await db.update('patients', patient, where: 'id = ?', whereArgs: [id]);
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل تحديث بيانات المريض: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deletePatient(int patientId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('patients', where: 'id = ?', whereArgs: [patientId]);
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل حذف سجل المريض: $e'));
     }
   }
 

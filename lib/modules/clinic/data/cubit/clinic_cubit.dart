@@ -112,6 +112,30 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     );
   }
 
+  Future<Either<Failure, void>> updatePatient(Map<String, dynamic> patient) async {
+    return await fastFire(
+      type: ClinicApiType.getPatients,
+      fun: () => _clinicRepo.updatePatient(patient),
+      onSuccess: (_) {
+        fetchPatients();
+        final int id = patient['id'];
+        fetchPatientRecord(id);
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> deletePatient(int patientId) async {
+    return await fastFire(
+      type: ClinicApiType.getPatients,
+      fun: () => _clinicRepo.deletePatient(patientId),
+      onSuccess: (_) {
+        selectedPatientRecord = null;
+        fetchPatients();
+        fetchDashboardStats();
+      },
+    );
+  }
+
   Future<Either<Failure, Map<String, dynamic>>> fetchPatientRecord(int patientId) async {
     return await fastFire(
       type: ClinicApiType.getPatientRecord,

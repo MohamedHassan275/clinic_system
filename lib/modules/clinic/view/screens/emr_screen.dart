@@ -20,6 +20,17 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
   Map<String, dynamic>? _selectedPatient;
   late TabController _tabController;
 
+  static const List<String> _contractFilters = [
+    'الكل',
+    'نقدي (خاص)',
+    'تأمين صحي',
+    'شركة تعاقد خاص',
+    'نقابة المهندسين/الأطباء',
+  ];
+  String _selectedContractFilter = 'الكل';
+
+  bool get _hasSelectedPatient => _selectedPatient != null;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +48,16 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
     super.dispose();
   }
 
+  void _onSearchOrFilterChanged() {
+    final search = _viewModel.patientSearchController.text.trim();
+    if (_selectedContractFilter == 'الكل') {
+      _viewModel.clinicCubit.fetchPatients(query: search.isEmpty ? null : search);
+      return;
+    }
+    final combinedQuery = search.isEmpty ? _selectedContractFilter : search;
+    _viewModel.clinicCubit.fetchPatients(query: combinedQuery);
+  }
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
@@ -51,7 +72,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
           children: [
             // Top Responsive Header
             if (isMobile) ...[
-              if (_selectedPatient != null)
+              if (_hasSelectedPatient)
                 Row(
                   children: [
                     IconButton(
@@ -86,9 +107,8 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                         onPressed: () {
-                          if (ShiftGuard.checkShiftOrWarn(context)) {
-                            _showAddPatientDialog(context);
-                          }
+                          if (!ShiftGuard.checkShiftOrWarn(context)) return;
+                          _showPatientFormDialog(context);
                         },
                         icon: const Icon(Icons.person_add_alt_1, color: Colors.white, size: 20),
                         label: const Text('تسجيل مريض جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -115,9 +135,8 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
-                      if (ShiftGuard.checkShiftOrWarn(context)) {
-                        _showAddPatientDialog(context);
-                      }
+                      if (!ShiftGuard.checkShiftOrWarn(context)) return;
+                      _showPatientFormDialog(context);
                     },
                     icon: const Icon(Icons.person_add_alt_1, color: Colors.white),
                     label: const Text('تسجيل مريض جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -127,20 +146,50 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
             ],
             const SizedBox(height: 16),
 
-            // Search Bar (Shown if patient not selected on mobile or on desktop)
-            if (!isMobile || _selectedPatient == null) ...[
-              TextField(
-                controller: _viewModel.patientSearchController,
-                decoration: InputDecoration(
-                  hintText: 'البحث باسم المريض، رقم الهاتف، أو الرقم القومي...',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                onChanged: (q) {
-                  _viewModel.clinicCubit.fetchPatients(query: q);
-                },
+            // Search Bar & Insurance Filter (Shown if patient not selected on mobile or on desktop)
+            if (!isMobile || !_hasSelectedPatient) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _viewModel.patientSearchController,
+                      decoration: InputDecoration(
+                        hintText: 'البحث باسم المريض، رقم الهاتف، أو الرقم القومي...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      onChanged: (_) => _onSearchOrFilterChanged(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedContractFilter,
+                        icon: const Icon(Icons.filter_alt_outlined, color: AppColors.primary),
+                        onChanged: (val) {
+                          if (val == null) return;
+                          setState(() => _selectedContractFilter = val);
+                          _onSearchOrFilterChanged();
+                        },
+                        items: _contractFilters.map((f) {
+                          return DropdownMenuItem<String>(
+                            value: f,
+                            child: Text(f, style: const TextStyle(fontSize: 13)),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
             ],
@@ -148,7 +197,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
             // Main Workspace View (Responsive Mobile vs Desktop)
             Expanded(
               child: isMobile
-                  ? (_selectedPatient == null
+                  ? (!_hasSelectedPatient
                       ? BlockBuilderWidget<ClinicCubit, ClinicApiType>(
                           types: const [ClinicApiType.getPatients],
                           body: (_) => _buildPatientsList(),
@@ -171,7 +220,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                         // Patient Detailed Clinical Workspace (Left Side 65%)
                         Expanded(
                           flex: 6,
-                          child: _selectedPatient == null
+                          child: !_hasSelectedPatient
                               ? Card(
                                   elevation: 1,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -228,7 +277,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
               ),
             ),
             title: Text(p['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            subtitle: Text('الهاتف: ${p['phone'] ?? 'بدون'} | فصيلة الدم: ${p['blood_group'] ?? 'غير محدد'}', style: const TextStyle(fontSize: 12)),
+            subtitle: Text('الهاتف: ${p['phone'] ?? 'بدون'} | الجهة: ${p['contract_entity'] ?? 'نقدي'}', style: const TextStyle(fontSize: 12)),
             trailing: const Icon(Icons.chevron_left, color: AppColors.textSecondary),
             onTap: () {
               setState(() => _selectedPatient = p);
@@ -254,7 +303,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Critical Header Bar with Clinical Demographics
+            // 1. Critical Header Bar with Demographics & Quick Actions (Edit / Delete)
             Row(
               children: [
                 CircleAvatar(
@@ -278,6 +327,20 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                       ),
                     ],
                   ),
+                ),
+                // Action Buttons for Patient Management
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: AppColors.primary),
+                  tooltip: 'تعديل بيانات المريض',
+                  onPressed: () {
+                    if (!ShiftGuard.checkShiftOrWarn(context)) return;
+                    _showPatientFormDialog(context, initialPatient: p);
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                  tooltip: 'حذف سجل المريض',
+                  onPressed: () => _confirmDeletePatient(context, p),
                 ),
               ],
             ),
@@ -500,21 +563,71 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
     );
   }
 
-  void _showAddPatientDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final nationalIdCtrl = TextEditingController();
-    final emergencyPhoneCtrl = TextEditingController();
+  void _confirmDeletePatient(BuildContext context, Map<String, dynamic> patient) async {
+    if (!ShiftGuard.checkShiftOrWarn(context)) return;
+    final int patientId = patient['id'] as int;
+    final String patientName = patient['name'] ?? '';
+
+    final bool confirmed = await showAppConfirmDialog(
+      context: context,
+      title: 'حذف سجل المريض',
+      message: 'هل أنت تأكد من رغبتك في حذف سجل المريض "$patientName"؟\nسيتم إزالة البيانات الخاصة بهذا المريض بشكل دائم.',
+      confirmText: 'حذف المريض',
+      confirmColor: AppColors.error,
+      icon: Icons.warning_amber_rounded,
+    );
+
+    if (!confirmed) return;
+
+    final res = await _viewModel.clinicCubit.deletePatient(patientId);
+    res.fold(
+      (failure) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('خطأ أثناء الحذف: ${failure.message}'), backgroundColor: AppColors.error),
+          );
+        }
+      },
+      (_) {
+        if (mounted) {
+          setState(() => _selectedPatient = null);
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم حذف سجل المريض بنجاح'), backgroundColor: AppColors.success),
+          );
+        }
+      },
+    );
+  }
+
+  void _showPatientFormDialog(BuildContext context, {Map<String, dynamic>? initialPatient}) {
+    final bool isEdit = initialPatient != null;
+    final nameCtrl = TextEditingController(text: initialPatient?['name'] ?? '');
+    final phoneCtrl = TextEditingController(text: initialPatient?['phone'] ?? '');
+    final nationalIdCtrl = TextEditingController(text: initialPatient?['national_id'] ?? '');
+    final emergencyPhoneCtrl = TextEditingController(text: initialPatient?['emergency_phone'] ?? '');
+    final allergiesCtrl = TextEditingController(
+      text: (initialPatient?['allergies'] == 'لا توجد') ? '' : (initialPatient?['allergies'] ?? ''),
+    );
 
     DateTime dob = DateTime.now().subtract(const Duration(days: 365 * 30));
-    String gender = 'ذكر';
-    String bloodGroup = 'O+';
-    String femaleStatus = 'طبيعي';
-    String contractEntity = 'نقدي (خاص)';
+    if (initialPatient?['dob'] != null) {
+      final parsed = DateTime.tryParse(initialPatient!['dob'].toString());
+      if (parsed != null) dob = parsed;
+    }
+
+    String gender = initialPatient?['gender'] ?? 'ذكر';
+    String bloodGroup = initialPatient?['blood_group'] ?? 'O+';
+    String femaleStatus = initialPatient?['female_status'] ?? 'طبيعي';
+    String contractEntity = initialPatient?['contract_entity'] ?? 'نقدي (خاص)';
 
     final List<String> chronicList = ['سكر', 'ضغط', 'كلى', 'سيولة', 'كبد'];
     final List<String> selectedChronic = [];
-    final allergiesCtrl = TextEditingController();
+    if (initialPatient?['chronic_diseases'] != null && (initialPatient!['chronic_diseases'] as String).isNotEmpty) {
+      final parts = (initialPatient['chronic_diseases'] as String).split('، ');
+      selectedChronic.addAll(parts.where((s) => s.isNotEmpty && s != 'لا توجد'));
+    }
 
     showDialog(
       context: context,
@@ -523,9 +636,9 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
           final int ageYears = DateTime.now().year - dob.year;
 
           return AppDialog(
-            title: 'إضافة مريض جديد والتسجيل السريري',
-            subtitle: 'أدخل البيانات الشخصية والطبية الهامة لتأسيس الملف السريري للمريض',
-            icon: Icons.person_add_alt_1_rounded,
+            title: isEdit ? 'تعديل بيانات المريض والملف السريري' : 'إضافة مريض جديد والتسجيل السريري',
+            subtitle: isEdit ? 'تعديل البيانات الشخصية والسريرية للمريض' : 'أدخل البيانات الشخصية والطبية الهامة لتأسيس الملف السريري للمريض',
+            icon: isEdit ? Icons.edit_note_rounded : Icons.person_add_alt_1_rounded,
             iconColor: AppColors.primary,
             maxWidth: 580,
             content: Column(
@@ -719,38 +832,59 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                     'female_status': femaleStatus,
                     'emergency_phone': emergencyPhoneCtrl.text.trim(),
                     'contract_entity': contractEntity,
-                    'chronic_diseases': selectedChronic.join('، '),
+                    'chronic_diseases': selectedChronic.isEmpty ? 'لا توجد' : selectedChronic.join('، '),
                     'allergies': allergiesCtrl.text.trim().isEmpty ? 'لا توجد' : allergiesCtrl.text.trim(),
-                    'medical_history': 'تسجيل أولي بدون ملاحظات سريرية',
-                    'created_at': nowStr,
+                    'medical_history': initialPatient?['medical_history'] ?? 'تسجيل أولي بدون ملاحظات سريرية',
+                    'created_at': initialPatient?['created_at'] ?? nowStr,
                   };
 
-                  final result = await _viewModel.clinicCubit.addPatient(patientData);
-                  result.fold(
-                    (_) {},
-                    (newId) {
-                      if (mounted) {
-                        setState(() {
-                          _selectedPatient = {
-                            'id': newId,
-                            ...patientData,
-                          };
-                        });
-                        _viewModel.clinicCubit.fetchPatientRecord(newId);
-                      }
-                    },
-                  );
+                  if (isEdit) {
+                    patientData['id'] = initialPatient['id'];
+                    final res = await _viewModel.clinicCubit.updatePatient(patientData);
+                    res.fold(
+                      (failure) {},
+                      (_) {
+                        if (mounted) {
+                          setState(() {
+                            _selectedPatient = patientData;
+                          });
+                        }
+                      },
+                    );
+                  } else {
+                    final result = await _viewModel.clinicCubit.addPatient(patientData);
+                    result.fold(
+                      (_) {},
+                      (newId) {
+                        if (mounted) {
+                          setState(() {
+                            _selectedPatient = {
+                              'id': newId,
+                              ...patientData,
+                            };
+                          });
+                          _viewModel.clinicCubit.fetchPatientRecord(newId);
+                        }
+                      },
+                    );
+                  }
 
                   if (dialogCtx.mounted) {
                     Navigator.of(dialogCtx).pop();
                   }
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم حفظ المريض والملف الطبي بنجاح!'), backgroundColor: AppColors.success),
+                      SnackBar(
+                        content: Text(isEdit ? 'تم تحديث بيانات المريض بنجاح!' : 'تم حفظ المريض والملف الطبي بنجاح!'),
+                        backgroundColor: AppColors.success,
+                      ),
                     );
                   }
                 },
-                child: const Text('حفظ المريض والملف الطبي', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text(
+                  isEdit ? 'حفظ التعديلات' : 'حفظ المريض والملف الطبي',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           );
