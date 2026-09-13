@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/common/widgets/app_dialog.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/responsive/responsive_layout.dart';
 import '../../../../core/security/shift_guard.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../shared/cubit/block_builder_widget.dart';
@@ -13,6 +14,7 @@ import '../widgets/patient/patient_lab_results_tab_widget.dart';
 import '../widgets/patient/patient_prescriptions_tab_widget.dart';
 import '../widgets/patient/patient_profile_tab_widget.dart';
 import '../widgets/patient/patient_vitals_tab_widget.dart';
+import 'patient_detail_hub_screen.dart';
 
 class EMRScreen extends StatefulWidget {
   const EMRScreen({super.key});
@@ -66,196 +68,190 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final bool isMobile = media.size.width < 768;
-
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Padding(
-        padding: EdgeInsets.all(isMobile ? 14.0 : 24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Responsive Header
-            if (isMobile) ...[
-              if (_hasSelectedPatient)
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () => setState(() => _selectedPatient = null),
-                      tooltip: 'الرجوع لقائمة المرضى',
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        _selectedPatient!['name'] ?? 'تفاصيل المريض',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                )
-              else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('الملف الطبي للمرضى (EMR)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    const Text('السجل الطبي الشامل ونتائج الفحوصات والروشتات', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () {
-                          if (!ShiftGuard.checkShiftOrWarn(context)) return;
-                          _showPatientFormDialog(context);
-                        },
-                        icon: const Icon(Icons.person_add_alt_1, color: Colors.white, size: 20),
-                        label: const Text('تسجيل مريض جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ],
-                ),
-            ] else ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('الملف الطبي للمرضى (EMR)', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 4),
-                      Text('نظام إدارة سجلات المرضى والملفات السريرية المتكامل', style: TextStyle(color: AppColors.textSecondary)),
-                    ],
-                  ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      if (!ShiftGuard.checkShiftOrWarn(context)) return;
-                      _showPatientFormDialog(context);
-                    },
-                    icon: const Icon(Icons.person_add_alt_1, color: Colors.white),
-                    label: const Text('تسجيل مريض جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 16),
-
-            // Search Bar & Insurance Filter (Shown if patient not selected on mobile or on desktop)
-            if (!isMobile || !_hasSelectedPatient) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _viewModel.patientSearchController,
-                      decoration: InputDecoration(
-                        hintText: 'البحث باسم المريض، رقم الهاتف، أو الرقم القومي...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                      onChanged: (_) => _onSearchOrFilterChanged(),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedContractFilter,
-                        icon: const Icon(Icons.filter_alt_outlined, color: AppColors.primary),
-                        onChanged: (val) {
-                          if (val == null) return;
-                          setState(() => _selectedContractFilter = val);
-                          _onSearchOrFilterChanged();
-                        },
-                        items: _contractFilters.map((f) {
-                          return DropdownMenuItem<String>(
-                            value: f,
-                            child: Text(f, style: const TextStyle(fontSize: 13)),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // Main Master-Detail Workspace
-            Expanded(
-              child: isMobile
-                  ? (!_hasSelectedPatient
-                      ? BlockBuilderWidget<ClinicCubit, ClinicApiType>(
-                          types: const [ClinicApiType.getPatients],
-                          body: (_) => _buildPatientsList(),
-                          loading: (_) => const Center(child: CircularProgressIndicator()),
-                        )
-                      : _buildPatientClinicalDashboard())
-                  : Row(
-                      children: [
-                        // Patients Master List (Left Column 35%)
-                        Expanded(
-                          flex: 3,
-                          child: BlockBuilderWidget<ClinicCubit, ClinicApiType>(
-                            types: const [ClinicApiType.getPatients],
-                            body: (_) => _buildPatientsList(),
-                            loading: (_) => const Center(child: CircularProgressIndicator()),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-
-                        // Patient Detailed Clinical Workspace (Right Column 65% with 6 Tabs)
-                        Expanded(
-                          flex: 6,
-                          child: !_hasSelectedPatient
-                              ? Card(
-                                  elevation: 1,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  child: const Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.folder_shared_outlined, size: 64, color: AppColors.textLight),
-                                        SizedBox(height: 16),
-                                        Text(
-                                          'اختر مريضاً من القائمة لعرض ملفه الطبي الشامل وتنبيهاته السريرية',
-                                          style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                              : _buildPatientClinicalDashboard(),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
+      body: ResponsiveLayout(
+        mobile: _buildMobileLayout(context),
+        tablet: _buildDesktopMasterDetailLayout(context),
+        desktop: _buildDesktopMasterDetailLayout(context),
       ),
     );
   }
 
-  Widget _buildPatientsList() {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 1. Mobile View (< 600px) — Standalone Patient Master List
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildMobileLayout(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(14.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('الملف الطبي للمرضى (EMR)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          const Text('السجل الطبي الشامل ونتائج الفحوصات والروشتات', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                if (!ShiftGuard.checkShiftOrWarn(context)) return;
+                _showPatientFormDialog(context);
+              },
+              icon: const Icon(Icons.person_add_alt_1, color: Colors.white, size: 20),
+              label: const Text('تسجيل مريض جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildSearchAndFilterRow(),
+          const SizedBox(height: 14),
+          Expanded(
+            child: BlockBuilderWidget<ClinicCubit, ClinicApiType>(
+              types: const [ClinicApiType.getPatients],
+              loading: (_) => const Center(child: CircularProgressIndicator()),
+              body: (_) => _buildPatientsList(isMobile: true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 2. Desktop & Tablet Layout (>= 600px) — Split Master-Detail Workspace
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildDesktopMasterDetailLayout(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('الملف الطبي للمرضى (EMR)', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 4),
+                  Text('نظام إدارة سجلات المرضى والملفات السريرية المتكامل', style: TextStyle(color: AppColors.textSecondary)),
+                ],
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () {
+                  if (!ShiftGuard.checkShiftOrWarn(context)) return;
+                  _showPatientFormDialog(context);
+                },
+                icon: const Icon(Icons.person_add_alt_1, color: Colors.white),
+                label: const Text('تسجيل مريض جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildSearchAndFilterRow(),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Row(
+              children: [
+                // Patients Master List (Left Column 35%)
+                Expanded(
+                  flex: 3,
+                  child: BlockBuilderWidget<ClinicCubit, ClinicApiType>(
+                    types: const [ClinicApiType.getPatients],
+                    loading: (_) => const Center(child: CircularProgressIndicator()),
+                    body: (_) => _buildPatientsList(isMobile: false),
+                  ),
+                ),
+                const SizedBox(width: 16),
+
+                // Patient Detailed Clinical Workspace (Right Column 65% with 6 Tabs)
+                Expanded(
+                  flex: 6,
+                  child: !_hasSelectedPatient
+                      ? Card(
+                          elevation: 1,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          child: const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.folder_shared_outlined, size: 64, color: AppColors.textLight),
+                                SizedBox(height: 16),
+                                Text(
+                                  'اختر مريضاً من القائمة لعرض ملفه الطبي الشامل وتنبيهاته السريرية',
+                                  style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : _buildPatientClinicalDashboard(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndFilterRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _viewModel.patientSearchController,
+            decoration: InputDecoration(
+              hintText: 'البحث باسم المريض، رقم الهاتف، أو الرقم القومي...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            onChanged: (_) => _onSearchOrFilterChanged(),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedContractFilter,
+              icon: const Icon(Icons.filter_alt_outlined, color: AppColors.primary),
+              onChanged: (val) {
+                if (val == null) return;
+                setState(() => _selectedContractFilter = val);
+                _onSearchOrFilterChanged();
+              },
+              items: _contractFilters.map((f) {
+                return DropdownMenuItem<String>(
+                  value: f,
+                  child: Text(f, style: const TextStyle(fontSize: 13)),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPatientsList({required bool isMobile}) {
     final list = _viewModel.clinicCubit.patients;
     if (list.isEmpty) {
       return Card(
@@ -291,6 +287,15 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
             onTap: () {
               setState(() => _selectedPatient = p);
               _viewModel.clinicCubit.fetchPatientRecord(p['id'] as int);
+
+              // On Mobile: Open Mobile PatientDetailHubScreen
+              if (isMobile) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PatientDetailHubScreen(patient: p),
+                  ),
+                );
+              }
             },
           );
         },
