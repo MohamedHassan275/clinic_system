@@ -235,6 +235,34 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     );
   }
 
+  Future<Either<Failure, void>> refundInvoice({
+    required int invoiceId,
+    required double refundAmount,
+    required String reason,
+    required int patientId,
+  }) async {
+    final user = SessionManager.instance.currentUser;
+    final shift = SessionManager.instance.activeShift;
+    final userId = user != null ? (user['id'] as int) : 1;
+    final shiftId = shift != null ? (shift['id'] as int) : 1;
+
+    return await fastFire(
+      type: ClinicApiType.createInvoice,
+      fun: () => _clinicRepo.refundInvoice(
+        invoiceId: invoiceId,
+        refundAmount: refundAmount,
+        reason: reason,
+        userId: userId,
+        shiftId: shiftId,
+        patientId: patientId,
+      ),
+      onSuccess: (_) {
+        fetchInvoices();
+        fetchDashboardStats();
+      },
+    );
+  }
+
   Future<Either<Failure, List<Map<String, dynamic>>>> fetchInventory() async {
     return await fastFire(
       type: ClinicApiType.getInventory,

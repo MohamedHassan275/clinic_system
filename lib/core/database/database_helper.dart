@@ -313,11 +313,30 @@ class DatabaseHelper {
         discount REAL DEFAULT 0.0,
         paid_amount REAL NOT NULL,
         payment_method TEXT NOT NULL,
+        status TEXT DEFAULT 'paid',
         created_at TEXT NOT NULL,
         updated_at TEXT,
         is_deleted INTEGER DEFAULT 0,
         last_synced_at TEXT,
         FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (shift_id) REFERENCES shifts (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 8.1 Refunds Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS refunds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL,
+        patient_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        shift_id INTEGER NOT NULL,
+        refund_amount REAL NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE,
         FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
         FOREIGN KEY (shift_id) REFERENCES shifts (id) ON DELETE CASCADE

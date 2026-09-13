@@ -36,6 +36,14 @@ abstract class ClinicRepo {
   // Invoices & Billing
   Future<Either<Failure, List<Map<String, dynamic>>>> getInvoices();
   Future<Either<Failure, int>> createInvoice(Map<String, dynamic> invoice);
+  Future<Either<Failure, void>> refundInvoice({
+    required int invoiceId,
+    required double refundAmount,
+    required String reason,
+    required int userId,
+    required int shiftId,
+    required int patientId,
+  });
 
   // Inventory
   Future<Either<Failure, List<Map<String, dynamic>>>> getInventory();
@@ -299,7 +307,8 @@ class ClinicRepoImpl implements ClinicRepo {
     try {
       final db = await DatabaseHelper.instance.database;
       final res = await db.rawQuery('''
-        SELECT i.*, p.name as patient_name, u.full_name as creator_name
+        SELECT i.*, p.name as patient_name, p.phone as patient_phone, u.full_name as creator_name,
+               COALESCE((SELECT SUM(refund_amount) FROM refunds WHERE invoice_id = i.id), 0.0) as refunded_amount
         FROM invoices i
         JOIN patients p ON i.patient_id = p.id
         JOIN users u ON i.user_id = u.id
@@ -319,6 +328,51 @@ class ClinicRepoImpl implements ClinicRepo {
       return Right(id);
     } catch (e) {
       return Left(Failure(500, 'فشل إنشاء الفاتورة: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> refundInvoice({
+    required int invoiceId,
+    required double refundAmount,
+    required String reason,
+    required int userId,
+    required int shiftId,
+    required int patientId,
+  }) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final nowStr = DateTime.now().toIso8601String().substring(0, 16).replaceAll('T', ' ');
+
+      await db.transaction((txn) async {
+        await txn.insert('refunds', {
+          'invoice_id': invoiceId,
+          'patient_id': patientId,
+          'user_id': userId,
+          'shift_id': shiftId,
+          'refund_amount': refundAmount,
+          'reason': reason,
+          'created_at': nowStr,
+        });
+
+        final invRes = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+        if (invRes.isNotEmpty) {
+          final originalPaid = (invRes.first['paid_amount'] as num?)?.toDouble() ?? 0.0;
+          final refRes = await txn.rawQuery('SELECT SUM(refund_amount) as total FROM refunds WHERE invoice_id = ?', [invoiceId]);
+          final totalRefunded = (refRes.first['total'] as num?)?.toDouble() ?? 0.0;
+
+          final newStatus = (totalRefunded >= originalPaid) ? 'refunded' : 'partially_refunded';
+          await txn.update(
+            'invoices',
+            {'status': newStatus, 'updated_at': nowStr},
+            where: 'id = ?',
+            whereArgs: [invoiceId],
+          );
+        }
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل استرجاع الفاتورة: $e'));
     }
   }
 

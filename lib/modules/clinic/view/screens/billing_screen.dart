@@ -336,12 +336,15 @@ class _BillingScreenState extends State<BillingScreen> {
 
     for (var inv in list) {
       final double paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
-      totalRevenue += paid;
+      final double refunded = (inv['refunded_amount'] as num?)?.toDouble() ?? 0.0;
+      final double netPaid = paid - refunded;
+
+      totalRevenue += netPaid;
       final method = PaymentMethod.fromString(inv['payment_method'] as String?);
       if (method == PaymentMethod.cash) {
-        cashTotal += paid;
+        cashTotal += netPaid;
       } else {
-        digitalTotal += paid;
+        digitalTotal += netPaid;
       }
     }
 
@@ -498,10 +501,25 @@ class _BillingScreenState extends State<BillingScreen> {
         final inv = list[index];
         final paymentEnum = PaymentMethod.fromString(inv['payment_method'] as String?);
 
+        final double paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
+        final double refunded = (inv['refunded_amount'] as num?)?.toDouble() ?? 0.0;
+        final double netPaid = paid - refunded;
+        final String statusStr = inv['status'] as String? ?? 'paid';
+
         Color methodColor = AppColors.success;
         if (paymentEnum == PaymentMethod.card) methodColor = AppColors.primary;
         if (paymentEnum == PaymentMethod.transfer) methodColor = Colors.purple;
         if (paymentEnum == PaymentMethod.insurance) methodColor = Colors.teal;
+
+        Color invoiceStatusColor = AppColors.success;
+        String invoiceStatusLabel = 'مسددة ✅';
+        if (statusStr == 'partially_refunded') {
+          invoiceStatusColor = Colors.orange;
+          invoiceStatusLabel = 'استرجاع جزئي ⚠️';
+        } else if (statusStr == 'refunded' || netPaid <= 0) {
+          invoiceStatusColor = AppColors.error;
+          invoiceStatusLabel = 'مسترجعة 🔄';
+        }
 
         return Card(
           elevation: 1,
@@ -525,7 +543,19 @@ class _BillingScreenState extends State<BillingScreen> {
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: invoiceStatusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    invoiceStatusLabel,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: invoiceStatusColor),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: methodColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
@@ -538,15 +568,15 @@ class _BillingScreenState extends State<BillingScreen> {
               ],
             ),
             subtitle: Text(
-              'الإجمالي: ${inv['total_amount']} ج.م | الخصم: ${inv['discount']} ج.م | التاريخ: ${inv['created_at'] ?? ''}',
+              'الإجمالي: ${inv['total_amount']} ج.م | الخصم: ${inv['discount']} ج.م | المسترجع: $refunded ج.م',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '${inv['paid_amount']} ج.م',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.success),
+                  '${netPaid.toStringAsFixed(0)} ج.م',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: netPaid <= 0 ? AppColors.error : AppColors.success),
                 ),
                 const SizedBox(width: 8),
                 PopupMenuButton<String>(
@@ -556,6 +586,7 @@ class _BillingScreenState extends State<BillingScreen> {
                     if (action == 'print') _printInvoiceReceipt(inv);
                     if (action == 'whatsapp') _sendWhatsAppInvoice(inv);
                     if (action == 'details') _showInvoiceDetailsModal(inv);
+                    if (action == 'refund') _showRefundInvoiceDialog(inv);
                   },
                   itemBuilder: (ctx) => [
                     const PopupMenuItem(
@@ -585,6 +616,17 @@ class _BillingScreenState extends State<BillingScreen> {
                           Icon(Icons.info_outline, color: AppColors.primary, size: 18),
                           SizedBox(width: 8),
                           Text('تفاصيل الفاتورة (Details)'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'refund',
+                      child: Row(
+                        children: [
+                          Icon(Icons.assignment_return_outlined, color: AppColors.error, size: 18),
+                          SizedBox(width: 8),
+                          Text('استرجاع (Refund)'),
                         ],
                       ),
                     ),
@@ -888,6 +930,86 @@ class _BillingScreenState extends State<BillingScreen> {
         children: [
           Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
           Text(val, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  void _showRefundInvoiceDialog(Map<String, dynamic> inv) {
+    final double originalPaid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
+    final double alreadyRefunded = (inv['refunded_amount'] as num?)?.toDouble() ?? 0.0;
+    final double maxRefundable = (originalPaid - alreadyRefunded).clamp(0, double.infinity);
+
+    if (maxRefundable <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('هذه الفاتورة مسترجعة بالكامل بالفعل!'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
+    final refundAmountCtrl = TextEditingController(text: maxRefundable.toStringAsFixed(0));
+    final reasonCtrl = TextEditingController(text: 'طلب المريض إلغاء الخدمة / استرجاع الكشف');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AppDialog(
+        title: 'استرجاع الفاتورة #${inv['id']}',
+        subtitle: 'المريض: ${inv['patient_name']} | المبلغ الأقصى القابل للاسترجاع: $maxRefundable ج.م',
+        icon: Icons.assignment_return_rounded,
+        iconColor: AppColors.error,
+        maxWidth: 480,
+        content: Column(
+          children: [
+            TextField(
+              controller: refundAmountCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'المبلغ المسترجع (ج.م) *',
+                prefixIcon: const Icon(Icons.attach_money),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'سبب الاسترجاع *',
+                prefixIcon: const Icon(Icons.notes),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () async {
+              final amount = double.tryParse(refundAmountCtrl.text) ?? 0.0;
+              if (amount <= 0 || amount > maxRefundable) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('يرجى إدخال مبلغ استرجاع صحيح (بين 1 و $maxRefundable)'), backgroundColor: AppColors.error),
+                );
+                return;
+              }
+
+              await _viewModel.clinicCubit.refundInvoice(
+                invoiceId: inv['id'] as int,
+                refundAmount: amount,
+                reason: reasonCtrl.text.trim(),
+                patientId: inv['patient_id'] as int,
+              );
+
+              if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('تم استرجاع مبلغ $amount ج.م وتخفيض رصيد الخزينة بالوردية!'), backgroundColor: AppColors.success),
+                );
+              }
+            },
+            child: const Text('تأكيد الاسترجاع', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );
