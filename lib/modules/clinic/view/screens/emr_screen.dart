@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../../../core/common/widgets/app_dialog.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/responsive/responsive_layout.dart';
@@ -15,6 +14,7 @@ import '../widgets/patient/patient_prescriptions_tab_widget.dart';
 import '../widgets/patient/patient_profile_tab_widget.dart';
 import '../widgets/patient/patient_vitals_tab_widget.dart';
 import 'patient_detail_hub_screen.dart';
+import 'patient_registration_screen.dart';
 
 class EMRScreen extends StatefulWidget {
   const EMRScreen({super.key});
@@ -345,7 +345,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                   tooltip: 'تعديل بيانات المريض',
                   onPressed: () {
                     if (!ShiftGuard.checkShiftOrWarn(context)) return;
-                    _showPatientFormDialog(context, initialPatient: p);
+                    PatientRegistrationScreen.show(context, initialPatient: p);
                   },
                 ),
                 IconButton(
@@ -390,7 +390,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                       patient: p,
                       onEditPressed: () {
                         if (!ShiftGuard.checkShiftOrWarn(context)) return;
-                        _showPatientFormDialog(context, initialPatient: p);
+                        PatientRegistrationScreen.show(context, initialPatient: p);
                       },
                     ),
                     // Tab 2: Vitals
@@ -468,274 +468,6 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
   }
 
   void _showPatientFormDialog(BuildContext context, {Map<String, dynamic>? initialPatient}) {
-    final bool isEdit = initialPatient != null;
-    final nameCtrl = TextEditingController(text: initialPatient?['name'] ?? '');
-    final phoneCtrl = TextEditingController(text: initialPatient?['phone'] ?? '');
-    final nationalIdCtrl = TextEditingController(text: initialPatient?['national_id'] ?? '');
-    final emergencyPhoneCtrl = TextEditingController(text: initialPatient?['emergency_phone'] ?? '');
-    final allergiesCtrl = TextEditingController(
-      text: (initialPatient?['allergies'] == 'لا توجد') ? '' : (initialPatient?['allergies'] ?? ''),
-    );
-
-    DateTime dob = DateTime.now().subtract(const Duration(days: 365 * 30));
-    if (initialPatient?['dob'] != null) {
-      final parsed = DateTime.tryParse(initialPatient!['dob'].toString());
-      if (parsed != null) dob = parsed;
-    }
-
-    String gender = initialPatient?['gender'] ?? 'ذكر';
-    String bloodGroup = initialPatient?['blood_group'] ?? 'O+';
-    String femaleStatus = initialPatient?['female_status'] ?? 'طبيعي';
-    String contractEntity = initialPatient?['contract_entity'] ?? 'نقدي (خاص)';
-
-    final List<String> chronicList = ['سكر', 'ضغط', 'كلى', 'سيولة', 'كبد'];
-    final List<String> selectedChronic = [];
-    if (initialPatient?['chronic_diseases'] != null && (initialPatient!['chronic_diseases'] as String).isNotEmpty) {
-      final parts = (initialPatient['chronic_diseases'] as String).split('، ');
-      selectedChronic.addAll(parts.where((s) => s.isNotEmpty && s != 'لا توجد'));
-    }
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          final int ageYears = DateTime.now().year - dob.year;
-
-          return AppDialog(
-            title: isEdit ? 'تعديل بيانات المريض والملف السريري' : 'إضافة مريض جديد والتسجيل السريري',
-            subtitle: isEdit ? 'تعديل البيانات الشخصية والسريرية للمريض' : 'أدخل البيانات الشخصية والطبية الهامة لتأسيس الملف السريري للمريض',
-            icon: isEdit ? Icons.edit_note_rounded : Icons.person_add_alt_1_rounded,
-            iconColor: AppColors.primary,
-            maxWidth: 580,
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Section 1: Personal Identification
-                const Text('1. البيانات الشخصية والهوية:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'الاسم بالكامل *', prefixIcon: Icon(Icons.person)),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: phoneCtrl,
-                        keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(labelText: 'رقم الهاتف *', prefixIcon: Icon(Icons.phone)),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: nationalIdCtrl,
-                        decoration: const InputDecoration(labelText: 'الرقم القومي / جواز السفر', prefixIcon: Icon(Icons.badge)),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                // Date of birth & Age badge
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: dob,
-                            firstDate: DateTime(1920),
-                            lastDate: DateTime.now(),
-                          );
-                          if (picked != null) {
-                            setModalState(() => dob = picked);
-                          }
-                        },
-                        child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'تاريخ الميلاد', prefixIcon: Icon(Icons.cake)),
-                          child: Text(DateFormat('yyyy-MM-dd').format(dob)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(10)),
-                      child: Text('السن: $ageYears سنة', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Section 2: Clinical Demographics
-                const Text('2. البيانات السريرية وفصيلة الدم:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: gender,
-                        decoration: const InputDecoration(labelText: 'النوع (الجنس) *'),
-                        items: const [
-                          DropdownMenuItem(value: 'ذكر', child: Text('ذكر')),
-                          DropdownMenuItem(value: 'أنثى', child: Text('أنثى')),
-                        ],
-                        onChanged: (val) => setModalState(() => gender = val!),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: bloodGroup,
-                        decoration: const InputDecoration(labelText: 'فصيلة الدم'),
-                        items: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', 'غير محدد'].map((bg) {
-                          return DropdownMenuItem(value: bg, child: Text(bg));
-                        }).toList(),
-                        onChanged: (val) => setModalState(() => bloodGroup = val!),
-                      ),
-                    ),
-                  ],
-                ),
-                if (gender == 'أنثى') ...[
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: femaleStatus,
-                    decoration: const InputDecoration(labelText: 'الحالة الفسيولوجية للأنثى'),
-                    items: const [
-                      DropdownMenuItem(value: 'طبيعي', child: Text('طبيعي')),
-                      DropdownMenuItem(value: 'حامل', child: Text('حامل')),
-                      DropdownMenuItem(value: 'مرضع', child: Text('مرضع')),
-                    ],
-                    onChanged: (val) => setModalState(() => femaleStatus = val!),
-                  ),
-                ],
-                const SizedBox(height: 16),
-
-                // Section 3: Emergency Contact & Insurance
-                const Text('3. هاتف الطوارئ والجهة/التعاقد:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: emergencyPhoneCtrl,
-                        keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(labelText: 'هاتف الطوارئ / القرابة'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: contractEntity,
-                        decoration: const InputDecoration(labelText: 'الجهة / التعاقد'),
-                        items: const [
-                          DropdownMenuItem(value: 'نقدي (خاص)', child: Text('نقدي (خاص)')),
-                          DropdownMenuItem(value: 'تأمين صحي', child: Text('تأمين صحي')),
-                          DropdownMenuItem(value: 'شركة تعاقد خاص', child: Text('شركة تعاقد خاص')),
-                          DropdownMenuItem(value: 'نقابة المهندسين/الأطباء', child: Text('نقابة المهندسين/الأطباء')),
-                        ],
-                        onChanged: (val) => setModalState(() => contractEntity = val!),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Section 4: Chronic Conditions & Allergies Tags
-                const Text('4. الأمراض المزمنة والحساسية:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: chronicList.map((ch) {
-                    final isSel = selectedChronic.contains(ch);
-                    return FilterChip(
-                      selected: isSel,
-                      label: Text(ch),
-                      onSelected: (val) {
-                        setModalState(() {
-                          if (val) {
-                            selectedChronic.add(ch);
-                          } else {
-                            selectedChronic.remove(ch);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: allergiesCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'الحساسيات الغذائية أو الدوائية العالية (إن وجدت)',
-                    hintText: 'مثال: بنسلين، أسبرين، ألبان',
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                onPressed: () async {
-                  final String name = nameCtrl.text.trim();
-                  final String phone = phoneCtrl.text.trim();
-
-                  if (name.isEmpty || phone.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('برجاء إدخال الاسم ورقم الهاتف على الأقل'), backgroundColor: AppColors.error),
-                    );
-                    return;
-                  }
-
-                  final Map<String, dynamic> patientData = {
-                    if (isEdit) 'id': initialPatient['id'],
-                    'name': name,
-                    'phone': phone,
-                    'national_id': nationalIdCtrl.text.trim(),
-                    'age': ageYears,
-                    'gender': gender,
-                    'dob': DateFormat('yyyy-MM-dd').format(dob),
-                    'blood_group': bloodGroup,
-                    'female_status': femaleStatus,
-                    'emergency_phone': emergencyPhoneCtrl.text.trim(),
-                    'contract_entity': contractEntity,
-                    'allergies': allergiesCtrl.text.trim().isEmpty ? 'لا توجد' : allergiesCtrl.text.trim(),
-                    'chronic_diseases': selectedChronic.isEmpty ? 'لا توجد' : selectedChronic.join('، '),
-                    'created_at': isEdit ? initialPatient['created_at'] : DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
-                  };
-
-                  if (isEdit) {
-                    await _viewModel.clinicCubit.updatePatient(patientData);
-                  } else {
-                    await _viewModel.clinicCubit.addPatient(patientData);
-                  }
-
-                  if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(isEdit ? 'تم تحديث بيانات المريض بنجاح' : 'تم إضافة المريض الجديد للمنظومة بنجاح'),
-                        backgroundColor: AppColors.success,
-                      ),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.check, color: Colors.white, size: 18),
-                label: Text(isEdit ? 'تحديث البيانات' : 'حفظ وتسجيل المريض', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    PatientRegistrationScreen.show(context, initialPatient: initialPatient);
   }
 }

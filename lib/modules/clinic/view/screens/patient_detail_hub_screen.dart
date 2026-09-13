@@ -13,6 +13,8 @@ import '../widgets/patient/patient_prescriptions_tab_widget.dart';
 import '../widgets/patient/patient_profile_tab_widget.dart';
 import '../widgets/patient/patient_vitals_tab_widget.dart';
 
+import 'patient_registration_screen.dart';
+
 class PatientDetailHubScreen extends StatefulWidget {
   final Map<String, dynamic> patient;
 
@@ -194,9 +196,6 @@ class _PatientDetailHubScreenState extends State<PatientDetailHubScreen> with Si
   }
 
   void _showEditPatientModal(BuildContext context, Map<String, dynamic> initialPatient) {
-    // Triggers edit modal
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('ميزّة التعديل السريع متاحة أيضاً من الشاشة الرئيسية'), backgroundColor: AppColors.primary),
-    );
+    PatientRegistrationScreen.show(context, initialPatient: initialPatient);
   }
 }
