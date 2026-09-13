@@ -95,7 +95,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
+                              color: Colors.white.withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.point_of_sale_rounded, size: 56, color: AppColors.accent),

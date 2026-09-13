@@ -50,6 +50,10 @@ class DatabaseHelper {
     await _createTables(db);
 
     // 2. Non-destructive column addition for existing old tables
+    // TODO (v6): Migrate old tables to add FK on clinic_id
+    // Currently: clinic_id added via ALTER TABLE without FK constraint
+    // Impact: ON DELETE CASCADE won't work on old tables (users, patients, etc.)
+    // Fix: Use Recreate Pattern in next major migration
     final oldTables = [
       'users',
       'shifts',
@@ -77,6 +81,10 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE $table ADD COLUMN last_synced_at TEXT');
       } catch (_) {}
     }
+
+    try {
+      await db.execute('ALTER TABLE users ADD COLUMN password_hash TEXT');
+    } catch (_) {}
 
     // 3. Create Indexes
     await _createIndexes(db);
@@ -123,7 +131,8 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         clinic_id INTEGER DEFAULT 1,
         username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
+        password TEXT,
+        password_hash TEXT,
         full_name TEXT NOT NULL,
         role TEXT NOT NULL,
         branch TEXT DEFAULT 'جميع الفروع (سوبر أدمن)',
@@ -527,9 +536,8 @@ class DatabaseHelper {
     ]);
 
     // Super Admin User
-    final adminCount = Sqflite.firstIntValue(
-      await db.rawQuery("SELECT COUNT(*) FROM users WHERE username = 'mo_hassan'"),
-    ) ?? 0;
+    final adminCountRes = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE username = 'mo_hassan'");
+    final adminCount = adminCountRes.isNotEmpty ? (adminCountRes.first['count'] as int? ?? 0) : 0;
     if (adminCount == 0) {
       await db.insert('users', {
         'clinic_id': 1,
@@ -545,9 +553,8 @@ class DatabaseHelper {
     }
 
     // Doctor User
-    final doctorCount = Sqflite.firstIntValue(
-      await db.rawQuery("SELECT COUNT(*) FROM users WHERE username = 'dr_hassan'"),
-    ) ?? 0;
+    final doctorCountRes = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE username = 'dr_hassan'");
+    final doctorCount = doctorCountRes.isNotEmpty ? (doctorCountRes.first['count'] as int? ?? 0) : 0;
     if (doctorCount == 0) {
       await db.insert('users', {
         'clinic_id': 1,

@@ -138,7 +138,7 @@ class _BillingScreenState extends State<BillingScreen> {
           final inv = list[index];
           return ListTile(
             leading: CircleAvatar(
-              backgroundColor: AppColors.success.withOpacity(0.15),
+              backgroundColor: AppColors.success.withValues(alpha: 0.15),
               child: const Icon(Icons.attach_money, color: AppColors.success),
             ),
             title: Text('فاتورة #${inv['id']} - ${inv['patient_name']}', style: const TextStyle(fontWeight: FontWeight.bold)),

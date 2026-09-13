@@ -24,12 +24,15 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
       buildWhen: (p, c) => types.contains(c.type),
       builder: (context, state) {
         final CubitClass cubit = context.read<CubitClass>();
-        final currentState = cubit.stateOf(state.type);
+        final S activeType = types.contains(state.type) ? state.type : types.first;
 
-        if (currentState.isDone()) return body(state.type);
-        if (currentState.isLoading()) {
+        final isLoading = types.any((t) => cubit.stateOf(t).isLoading());
+        final isError = !isLoading && types.any((t) => cubit.stateOf(t).isError());
+        final isLoadMore = !isLoading && !isError && types.any((t) => cubit.stateOf(t).isPaginationLoadMore());
+
+        if (isLoading) {
           return loading != null
-              ? loading!(state.type)
+              ? loading!(activeType)
               : const Center(
                   child: Padding(
                     padding: EdgeInsets.all(16.0),
@@ -37,9 +40,9 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
                   ),
                 );
         }
-        if (currentState.isError()) {
+        if (isError) {
           return error != null
-              ? error!(state.type)
+              ? error!(activeType)
               : Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -58,10 +61,10 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
                   ),
                 );
         }
-        if (currentState.isPaginationLoadMore()) {
-          return fetchMore != null ? fetchMore!(state.type) : body(state.type);
+        if (isLoadMore) {
+          return fetchMore != null ? fetchMore!(activeType) : body(activeType);
         }
-        return body(state.type);
+        return body(activeType);
       },
     );
   }

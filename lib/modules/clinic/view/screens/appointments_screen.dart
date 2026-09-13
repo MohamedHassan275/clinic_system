@@ -133,7 +133,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             leading: CircleAvatar(
               radius: 22,
-              backgroundColor: isUrgent ? AppColors.error.withOpacity(0.15) : AppColors.primaryLight,
+              backgroundColor: isUrgent ? AppColors.error.withValues(alpha: 0.15) : AppColors.primaryLight,
               child: Text(
                 '#${appt['id']}',
                 style: TextStyle(color: isUrgent ? AppColors.error : AppColors.primary, fontWeight: FontWeight.bold),
@@ -146,7 +146,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isUrgent ? AppColors.error.withOpacity(0.12) : Colors.grey[200],
+                    color: isUrgent ? AppColors.error.withValues(alpha: 0.12) : Colors.grey[200],
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -163,7 +163,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: _getStatusColor(appt['status']).withOpacity(0.12),
+                color: _getStatusColor(appt['status']).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -235,7 +235,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withOpacity(0.12),
+                          color: Colors.amber.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(

@@ -182,7 +182,7 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.accent.withOpacity(0.2),
+                        color: AppColors.accent.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(Icons.local_hospital, color: AppColors.accent, size: 28),
@@ -209,7 +209,7 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
+                    color: Colors.white.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.white12),
                   ),
@@ -290,7 +290,7 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
             padding: const EdgeInsets.all(12.0),
             child: ListTile(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              tileColor: Colors.red.withOpacity(0.12),
+              tileColor: Colors.red.withValues(alpha: 0.12),
               leading: const Icon(Icons.logout, color: Colors.redAccent, size: 22),
               title: const Text(
                 'تسجيل الخروج',

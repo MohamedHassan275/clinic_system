@@ -17,7 +17,7 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   late final ClinicViewModel _viewModel;
   String _searchQuery = '';
-  String _selectedCategory = 'الكل';
+  final String _selectedCategory = 'الكل';
   bool _showOnlyLowStock = false;
 
   @override
@@ -173,14 +173,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 6, offset: const Offset(0, 2)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.01), blurRadius: 6, offset: const Offset(0, 2)),
         ],
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: color.withOpacity(0.12), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
             child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(width: 12),
@@ -268,7 +268,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             leading: CircleAvatar(
               radius: 22,
-              backgroundColor: isLowStock ? AppColors.error.withOpacity(0.15) : AppColors.primaryLight,
+              backgroundColor: isLowStock ? AppColors.error.withValues(alpha: 0.15) : AppColors.primaryLight,
               child: Icon(
                 isLowStock ? Icons.warning_amber_rounded : Icons.inventory_2,
                 color: isLowStock ? AppColors.error : AppColors.primary,

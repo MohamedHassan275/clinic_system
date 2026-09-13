@@ -60,15 +60,16 @@ class _ConsultationScreenState extends State<ConsultationScreen> {
     }
 
     final doctor = SessionManager.instance.currentUser;
+    final doctorId = doctor?['id'] ?? 1;
     final nowStr = DateTime.now().toIso8601String().substring(0, 10);
 
     _viewModel.clinicCubit.addPrescription(
       prescription: {
-        'appointment_id': 1,
+        'appointment_id': null,
         'patient_id': _selectedPatientId!,
-        'doctor_id': doctor!['id'],
-        'diagnosis': _viewModel.diagnosisController.text,
-        'notes': _viewModel.notesController.text,
+        'doctor_id': doctorId,
+        'diagnosis': _viewModel.diagnosisController.text.trim(),
+        'notes': _viewModel.notesController.text.trim(),
         'created_at': nowStr,
       },
       items: _viewModel.prescriptionItems,

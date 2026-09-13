@@ -155,6 +155,9 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
           final isSelected = _selectedPatient != null && _selectedPatient!['id'] == p['id'];
           final String bloodGroup = p['blood_group'] ?? 'غير محدد';
 
+          final String phoneStr = (p['phone'] != null && p['phone'].toString().isNotEmpty) ? p['phone'].toString() : 'غير مسجل';
+          final String genderStr = (p['gender'] != null && p['gender'].toString().isNotEmpty) ? p['gender'].toString() : 'غير محدد';
+
           return ListTile(
             selected: isSelected,
             selectedTileColor: AppColors.primaryLight,
@@ -176,7 +179,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                   ),
               ],
             ),
-            subtitle: Text('الهاتف: ${p['phone']} | السن: ${p['age'] ?? '-'} سنة | ${p['gender']}'),
+            subtitle: Text('الهاتف: $phoneStr | السن: ${p['age'] ?? '-'} سنة | $genderStr'),
             onTap: () {
               setState(() {
                 _selectedPatient = p;
@@ -245,7 +248,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'الهاتف: ${p['phone']} | الرقم القومي: ${p['national_id'] ?? 'غير مسجل'} | التعاقد: ${p['contract_entity'] ?? 'نقدي (خاص)'}',
+                          'الهاتف: ${p['phone'] ?? 'غير مسجل'} | الرقم القومي: ${p['national_id'] ?? 'غير مسجل'} | التعاقد: ${p['contract_entity'] ?? 'نقدي (خاص)'}',
                           style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                         ),
                       ],
@@ -378,7 +381,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
         return ListTile(
           leading: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: flagColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: flagColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
             child: Text(status, style: TextStyle(color: flagColor, fontWeight: FontWeight.bold, fontSize: 12)),
           ),
           title: Text(lab['test_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),

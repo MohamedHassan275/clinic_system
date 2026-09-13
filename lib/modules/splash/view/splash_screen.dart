@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../auth/view/login_screen.dart';
+import '../../auth/view/screens/setup_wizard_screen.dart';
 import '../../main_shell/view/clinic_main_shell.dart';
 import '../../shift/view/shift_screen.dart';
 import 'splash_view_model.dart';
@@ -21,6 +22,13 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
     _viewModel = sl<SplashViewModel>();
     _viewModel.initializeApp(
+      onGoToSetupWizard: () {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const SetupWizardScreen()),
+          );
+        }
+      },
       onGoToLogin: () {
         if (mounted) {
           Navigator.of(context).pushReplacement(
@@ -59,29 +67,18 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.local_hospital,
-              size: 80,
-              color: AppColors.accent,
-            ),
-            SizedBox(height: 24),
+            Icon(Icons.local_hospital, size: 80, color: AppColors.primary),
+            SizedBox(height: 16),
             Text(
-              'نظام إدارة العيادات الذكي',
+              'نظام إدارة العيادات والمراكز الطبية',
               style: TextStyle(
-                color: Colors.white,
-                fontSize: 26,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
             ),
-            SizedBox(height: 8),
-            Text(
-              'الإصدار المتكامل - أوفلاين',
-              style: TextStyle(color: Colors.white60, fontSize: 14),
-            ),
-            SizedBox(height: 48),
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.accent),
-            ),
+            SizedBox(height: 24),
+            CircularProgressIndicator(color: AppColors.primary),
           ],
         ),
       ),
