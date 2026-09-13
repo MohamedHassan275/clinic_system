@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/enums/user_role.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../shared/cubit/base_cubit.dart';
 import '../../auth/view/login_screen.dart';
 import '../../clinic/data/cubit/clinic_cubit.dart';
 import '../../clinic/view/screens/appointments_screen.dart';
@@ -15,6 +15,7 @@ import '../../clinic/view/screens/inventory_screen.dart';
 import '../../clinic/view/screens/reports_screen.dart';
 import '../../clinic/view/screens/settings_screen.dart';
 import '../../clinic/view/screens/waiting_room_screen.dart';
+import '../../shared/cubit/base_cubit.dart';
 import 'main_shell_view_model.dart';
 
 class ClinicMainShell extends StatefulWidget {
@@ -115,8 +116,13 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
       child: BlocBuilder<ClinicCubit, BaseState<ClinicApiType>>(
         builder: (context, state) {
           final allowedItems = _viewModel.allowedMenuItems;
-          final int validIndex = _viewModel.selectedIndex.clamp(0, allowedItems.isEmpty ? 0 : allowedItems.length - 1);
-          final currentKey = allowedItems.isNotEmpty ? allowedItems[validIndex].key : 'dashboard';
+          final int validIndex = _viewModel.selectedIndex.clamp(
+            0,
+            allowedItems.isEmpty ? 0 : allowedItems.length - 1,
+          );
+          final currentKey = allowedItems.isNotEmpty
+              ? allowedItems[validIndex].key
+              : 'dashboard';
 
           return Directionality(
             textDirection: TextDirection.rtl,
@@ -128,9 +134,9 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                   return Scaffold(
                     body: Row(
                       children: [
-                        // Persistent Fixed Right Sidebar (260px)
+                        // Persistent Fixed Right Sidebar (270px)
                         SizedBox(
-                          width: 260,
+                          width: 270,
                           child: _buildSidebarContent(allowedItems, validIndex, isDesktop: true),
                         ),
                         const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
@@ -145,7 +151,9 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                   // Mobile Layout (< 1024px)
                   return Scaffold(
                     appBar: AppBar(
-                      title: Text(allowedItems.isNotEmpty ? allowedItems[validIndex].title : 'نظام العيادات'),
+                      title: Text(
+                        allowedItems.isNotEmpty ? allowedItems[validIndex].title : 'نظام العيادات',
+                      ),
                       centerTitle: false,
                     ),
                     endDrawer: Drawer(
@@ -162,10 +170,14 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
     );
   }
 
-  Widget _buildSidebarContent(List<NavigationMenuItem> items, int selectedIndex, {required bool isDesktop}) {
+  Widget _buildSidebarContent(
+    List<NavigationMenuItem> items,
+    int selectedIndex, {
+    required bool isDesktop,
+  }) {
     final user = SessionManager.instance.currentUser;
-    final String fullName = user != null ? user['full_name'] : 'مستخدم العيادة';
-    final String role = user != null ? (user['role'] == 'admin' ? 'طبيب / مدير النظام' : 'موظف استقبال') : '';
+    final String fullName = user != null ? (user['full_name'] ?? 'مستخدم العيادة') : 'مستخدم العيادة';
+    final UserRole role = _viewModel.currentRole;
 
     return Container(
       color: AppColors.sidebarBackground,
@@ -173,10 +185,10 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
         children: [
           // Header Logo & Active User Profile
           Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Container(
@@ -194,7 +206,11 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                         children: [
                           Text(
                             'عيادتي الذكية',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
                           ),
                           Text(
                             'نظام الإدارة الشامل',
@@ -206,6 +222,7 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                // User Profile Box
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -215,10 +232,16 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                   ),
                   child: Row(
                     children: [
-                      const CircleAvatar(
+                      CircleAvatar(
                         radius: 18,
-                        backgroundColor: AppColors.primary,
-                        child: Icon(Icons.person, color: Colors.white, size: 20),
+                        backgroundColor: role == UserRole.doctor
+                            ? AppColors.primary
+                            : (role == UserRole.superAdmin ? Colors.purple : AppColors.secondary),
+                        child: Icon(
+                          role == UserRole.doctor ? Icons.medical_services : Icons.person,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -229,10 +252,14 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                               fullName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
                             Text(
-                              role,
+                              role.displayName,
                               style: const TextStyle(color: AppColors.accent, fontSize: 11),
                             ),
                           ],
@@ -241,6 +268,61 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                     ],
                   ),
                 ),
+
+                // SuperAdmin Role Switcher Toggle
+                if (role == UserRole.superAdmin) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _viewModel.toggleAdminRoleView(UserRole.doctor),
+                            borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _viewModel.activeRoleMode == UserRole.doctor
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'بوابة الطبيب',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _viewModel.toggleAdminRoleView(UserRole.secretary),
+                            borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _viewModel.activeRoleMode == UserRole.secretary
+                                    ? AppColors.secondary
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'بوابة الاستقبال',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -294,7 +376,11 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
               leading: const Icon(Icons.logout, color: Colors.redAccent, size: 22),
               title: const Text(
                 'تسجيل الخروج',
-                style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
               onTap: () {
                 if (!isDesktop) Navigator.of(context).pop();
@@ -307,4 +393,3 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
     );
   }
 }
-

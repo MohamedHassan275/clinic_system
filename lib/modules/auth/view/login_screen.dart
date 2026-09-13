@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/enums/user_role.dart';
+import '../../../../core/security/session_manager.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../main_shell/view/clinic_main_shell.dart';
 import '../../shared/cubit/base_cubit.dart';
 import '../../shared/cubit/block_builder_widget.dart';
+import '../../shift/view/shift_screen.dart';
 import '../data/cubit/auth_cubit.dart';
 import 'login_view_model.dart';
-import '../../shift/view/shift_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -33,10 +36,26 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _navigateToShiftScreen() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const ShiftScreen()),
-    );
+  void _handlePostLoginNavigation() {
+    final user = SessionManager.instance.currentUser;
+    final role = UserRole.fromString(user?['role']);
+
+    if (role == UserRole.doctor || role == UserRole.superAdmin) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ClinicMainShell()),
+      );
+    } else {
+      // Secretary / Receptionist: Check active shift
+      if (SessionManager.instance.hasActiveShift) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const ClinicMainShell()),
+        );
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const ShiftScreen()),
+        );
+      }
+    }
   }
 
   @override
@@ -51,9 +70,11 @@ class _LoginScreenState extends State<LoginScreen> {
             final cubit = context.read<AuthCubit>();
             final currentState = cubit.stateOf(AuthApiType.login);
             if (currentState.isDone()) {
+              final user = SessionManager.instance.currentUser;
+              final role = UserRole.fromString(user?['role']);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('تم تسجيل الدخول بنجاح! جاري الانتقال للوردية...'),
+                SnackBar(
+                  content: Text('مرحباً بك! تم التعرف على الدور: ${role.displayName}'),
                   backgroundColor: AppColors.success,
                 ),
               );
@@ -100,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             const SizedBox(height: 12),
                             const Text(
-                              'منظومة متكاملة لإدارة الحجوزات، الروشتات الإلكترونية، الملفات الطبية، والحسابات والورديات المالية بدقة فائقة.',
+                              'منظومة متكاملة متخصصة للعيادات والمراكز الطبية بتجربة موجهة حسب دور المستخدم (Doctor Portal & Secretary Portal).',
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 16,
@@ -108,11 +129,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             const SizedBox(height: 40),
-                            _buildFeatureCheck('إدارة الورديات وتدفق الصندوق المالي بسهولة'),
+                            _buildFeatureCheck('التعرف الآلي على الدور (Doctor / Secretary / Admin)'),
                             const SizedBox(height: 12),
-                            _buildFeatureCheck('روشتة إلكترونية ذكية مع اقتراح الأدوية والجرعات'),
+                            _buildFeatureCheck('روشتة إلكترونية وقوالب علاجية متطورة'),
                             const SizedBox(height: 12),
-                            _buildFeatureCheck('دعم شامل وأوفلاين بقواعد بيانات محليّة فائقة السرعة'),
+                            _buildFeatureCheck('قاعدة بيانات مشفرة وسريعة تعمل بدون إنترنت'),
                           ],
                         ),
                       ),
@@ -193,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'أدخل بيانات حسابك للمتابعة والوصول للنظام',
+            'أدخل بيانات حسابك للمتابعة والوصول للبوابة الخاصة بك',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 32),
@@ -238,7 +259,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          // POST Pattern: BlockBuilderWidget wraps ONLY the submit button
           BlockBuilderWidget<AuthCubit, AuthApiType>(
             types: const [AuthApiType.login],
             body: (_) => _buildSubmitButton(),
@@ -264,7 +284,7 @@ class _LoginScreenState extends State<LoginScreen> {
         onPressed: () {
           if (!_formKey.currentState!.validate()) return;
           _viewModel.submitLogin(
-            onSuccess: _navigateToShiftScreen,
+            onSuccess: _handlePostLoginNavigation,
             onError: (err) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
