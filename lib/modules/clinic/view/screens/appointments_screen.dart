@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/common/widgets/app_dialog.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/enums/appointment_enums.dart';
@@ -487,7 +491,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final appt = list[index];
-        final int apptId = appt['id'] as int;
 
         final statusEnum = AppointmentStatus.fromString(appt['status'] as String?);
         final typeEnum = AppointmentType.fromString(appt['type'] as String?);
@@ -543,32 +546,121 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
               'التوقيت: ${appt['time_slot']} | النوع: ${typeEnum.displayName} | الطبيب: ${appt['doctor_name'] ?? 'غير محدد'}',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
-            trailing: PopupMenuButton<String>(
-              tooltip: 'خيارات الموعد',
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(statusEnum.displayName, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11)),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(statusEnum.displayName, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11)),
-                    const SizedBox(width: 4),
-                    Icon(Icons.arrow_drop_down, color: statusColor, size: 18),
+                const SizedBox(width: 4),
+                PopupMenuButton<String>(
+                  tooltip: 'إجراءات وخيارات الموعد',
+                  icon: const Icon(Icons.more_vert, color: AppColors.textSecondary, size: 20),
+                  onSelected: (action) {
+                    if (!ShiftGuard.checkShiftOrWarn(context)) return;
+                    switch (action) {
+                      case 'confirm':
+                        _confirmAppointment(appt);
+                        break;
+                      case 'check_in':
+                        _checkInAppointment(appt);
+                        break;
+                      case 'reschedule':
+                        _showRescheduleDialog(appt);
+                        break;
+                      case 'edit':
+                        _showEditAppointmentDialog(appt);
+                        break;
+                      case 'whatsapp':
+                        _sendWhatsAppReminder(appt);
+                        break;
+                      case 'print':
+                        _printAppointmentTicket(appt);
+                        break;
+                      case 'cancel':
+                        _cancelAppointment(appt);
+                        break;
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'confirm',
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle_outline, color: AppColors.success, size: 18),
+                          SizedBox(width: 8),
+                          Text('تأكيد الموعد (Confirm)'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'check_in',
+                      child: Row(
+                        children: [
+                          Icon(Icons.medical_services_outlined, color: AppColors.primary, size: 18),
+                          SizedBox(width: 8),
+                          Text('إدخال للطابور (Check In)'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'reschedule',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_calendar_rounded, color: Colors.orange, size: 18),
+                          SizedBox(width: 8),
+                          Text('إعادة جدولة (Reschedule)'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_note_rounded, color: Colors.blue, size: 18),
+                          SizedBox(width: 8),
+                          Text('تعديل البيانات (Edit)'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'whatsapp',
+                      child: Row(
+                        children: [
+                          Icon(Icons.chat_bubble_outline_rounded, color: Colors.green, size: 18),
+                          SizedBox(width: 8),
+                          Text('تذكير بالواتساب (WhatsApp)'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'print',
+                      child: Row(
+                        children: [
+                          Icon(Icons.print_outlined, color: Colors.purple, size: 18),
+                          SizedBox(width: 8),
+                          Text('طباعة التذكرة (Print)'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'cancel',
+                      child: Row(
+                        children: [
+                          Icon(Icons.cancel_outlined, color: AppColors.error, size: 18),
+                          SizedBox(width: 8),
+                          Text('إلغاء الموعد (Cancel)'),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              onSelected: (newStatusKey) async {
-                if (!ShiftGuard.checkShiftOrWarn(context)) return;
-                await _viewModel.clinicCubit.updateAppointmentStatus(apptId, newStatusKey);
-              },
-              itemBuilder: (ctx) => [
-                const PopupMenuItem(value: 'waiting', child: Text('في الانتظار ⏳')),
-                const PopupMenuItem(value: 'in_progress', child: Text('جاري الكشف 🩺')),
-                const PopupMenuItem(value: 'completed', child: Text('مكتمل ✅')),
-                const PopupMenuItem(value: 'cancelled', child: Text('إلغاء الموعد ❌')),
               ],
             ),
           ),
@@ -831,6 +923,282 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Action Handlers (All 7 Supported Actions)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _confirmAppointment(Map<String, dynamic> appt) async {
+    await _viewModel.clinicCubit.updateAppointmentStatus(appt['id'] as int, 'waiting');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تأكيد الموعد ونقله إلى قائمة الانتظار بنجاح!'), backgroundColor: AppColors.success),
+      );
+    }
+  }
+
+  Future<void> _checkInAppointment(Map<String, dynamic> appt) async {
+    await _viewModel.clinicCubit.updateAppointmentStatus(appt['id'] as int, 'in_progress');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تسجيل حضور المريض وإدخاله لغرفة الكشف 🩺'), backgroundColor: AppColors.primary),
+      );
+    }
+  }
+
+  void _showRescheduleDialog(Map<String, dynamic> appt) {
+    DateTime selectedDate = DateTime.tryParse(appt['appointment_date'] ?? '') ?? DateTime.now();
+    TimeOfDay selectedTime = TimeOfDay.now();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
+          final formattedTime = selectedTime.format(context);
+
+          return AppDialog(
+            title: 'إعادة جدولة الموعد #${appt['id']}',
+            subtitle: 'اختر تاريخ ووقت جديد لحجز المريض: ${appt['patient_name']}',
+            icon: Icons.edit_calendar_rounded,
+            iconColor: AppColors.primary,
+            content: Column(
+              children: [
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                      lastDate: DateTime.now().add(const Duration(days: 90)),
+                    );
+                    if (picked != null) setDialogState(() => selectedDate = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: 'التاريخ الجديد *', prefixIcon: Icon(Icons.calendar_month)),
+                    child: Text(formattedDate, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showTimePicker(context: context, initialTime: selectedTime);
+                    if (picked != null) setDialogState(() => selectedTime = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: 'الوقت الجديد *', prefixIcon: Icon(Icons.access_time)),
+                    child: Text(formattedTime, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('إلغاء')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                onPressed: () async {
+                  await _viewModel.clinicCubit.rescheduleAppointment(appt['id'] as int, formattedDate, formattedTime);
+                  if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('تمت إعادة جدولة الموعد بنجاح إلى $formattedDate $formattedTime'), backgroundColor: AppColors.success),
+                    );
+                  }
+                },
+                child: const Text('حفظ التعديل', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditAppointmentDialog(Map<String, dynamic> appt) {
+    final users = _viewModel.clinicCubit.usersList;
+    AppointmentType selectedType = AppointmentType.fromString(appt['type']);
+    AppointmentPriority selectedPriority = AppointmentPriority.fromString(appt['priority']);
+    String selectedDoctor = appt['doctor_name'] ?? (users.isNotEmpty ? users.first['full_name'] : 'د. محمد حسن');
+    final notesController = TextEditingController(text: appt['notes'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AppDialog(
+            title: 'تعديل بيانات الموعد #${appt['id']}',
+            subtitle: 'تعديل بيانات الحجز للمريض: ${appt['patient_name']}',
+            icon: Icons.edit_note_rounded,
+            iconColor: AppColors.primary,
+            content: Column(
+              children: [
+                DropdownButtonFormField<AppointmentType>(
+                  initialValue: selectedType,
+                  decoration: const InputDecoration(labelText: 'نوع الموعد', prefixIcon: Icon(Icons.medical_services)),
+                  items: AppointmentType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.displayName))).toList(),
+                  onChanged: (val) => setDialogState(() => selectedType = val!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedDoctor,
+                  decoration: const InputDecoration(labelText: 'الطبيب المعالج', prefixIcon: Icon(Icons.badge)),
+                  items: users.isEmpty
+                      ? const [DropdownMenuItem(value: 'د. محمد حسن', child: Text('د. محمد حسن'))]
+                      : users.map((u) => DropdownMenuItem(value: u['full_name'] as String, child: Text(u['full_name'] as String))).toList(),
+                  onChanged: (val) => setDialogState(() => selectedDoctor = val!),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: notesController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'ملاحظات', prefixIcon: Icon(Icons.notes)),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: AppointmentPriority.values.map((p) {
+                    final isSelected = selectedPriority == p;
+                    return Expanded(
+                      child: ChoiceChip(
+                        selected: isSelected,
+                        label: Text(p.displayName),
+                        onSelected: (_) => setDialogState(() => selectedPriority = p),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('إلغاء')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                onPressed: () async {
+                  final updatedAppt = Map<String, dynamic>.from(appt);
+                  updatedAppt['type'] = selectedType.dbValue;
+                  updatedAppt['doctor_name'] = selectedDoctor;
+                  updatedAppt['notes'] = notesController.text.trim();
+                  updatedAppt['priority'] = selectedPriority.dbValue;
+
+                  await _viewModel.clinicCubit.updateAppointment(updatedAppt);
+                  if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('تم تحديث بيانات الموعد بنجاح!'), backgroundColor: AppColors.success),
+                    );
+                  }
+                },
+                child: const Text('حفظ التغييرات', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _sendWhatsAppReminder(Map<String, dynamic> appt) async {
+    final phone = appt['patient_phone'] ?? '01000000000';
+    final patientName = appt['patient_name'] ?? 'عزيزي المريض';
+    final date = appt['appointment_date'] ?? '';
+    final time = appt['time_slot'] ?? '';
+    final doctor = appt['doctor_name'] ?? 'الطبيب';
+
+    final text = 'أهلاً بك $patientName، نذكرك بموعدك بالعيادة يوم $date الساعة $time مع $doctor. نتمنى لك دوام الصحة والعافية.';
+    final encodedText = Uri.encodeComponent(text);
+    final cleanPhone = phone.toString().replaceAll(RegExp(r'\D'), '');
+    final formattedPhone = cleanPhone.startsWith('0') ? '2$cleanPhone' : cleanPhone;
+    final url = Uri.parse('https://wa.me/$formattedPhone?text=$encodedText');
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم فتح الواتساب لإرسال تذكير الموعد إلى $phone!'), backgroundColor: AppColors.success),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر فتح تطبيق الواتساب: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _printAppointmentTicket(Map<String, dynamic> appt) async {
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Text('تذكرة حجز موعد', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Text('رقم الموعد: #${appt['id']}'),
+              pw.Text('اسم المريض: ${appt['patient_name'] ?? ''}'),
+              pw.Text('تاريخ الحجز: ${appt['appointment_date'] ?? ''}'),
+              pw.Text('وقت الحجز: ${appt['time_slot'] ?? ''}'),
+              pw.Text('الطبيب المعالج: ${appt['doctor_name'] ?? ''}'),
+              pw.Text('نوع الكشف: ${appt['type'] ?? ''}'),
+              pw.SizedBox(height: 12),
+              pw.Center(child: pw.Text('شكراً لزيارتكم العيادة')),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'appointment_ticket_${appt['id']}.pdf',
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إرسال تذكرة الموعد للطباعة بنجاح!'), backgroundColor: AppColors.success),
+      );
+    }
+  }
+
+  Future<void> _cancelAppointment(Map<String, dynamic> appt) async {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AppDialog(
+        title: 'تأكيد إلغاء الموعد',
+        subtitle: 'هل أنت تأكد من إلغاء الموعد المحدد؟',
+        icon: Icons.warning_amber_rounded,
+        iconColor: AppColors.error,
+        content: Text(
+          'هل أنت تأكد من إلغاء موعد المريض: ${appt['patient_name']}؟',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('تراجع')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () async {
+              await _viewModel.clinicCubit.updateAppointmentStatus(appt['id'] as int, 'cancelled');
+              if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم إلغاء الموعد بنجاح'), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('تأكيد الإلغاء', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

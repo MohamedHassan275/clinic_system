@@ -14,6 +14,8 @@ abstract class ClinicRepo {
   Future<Either<Failure, List<Map<String, dynamic>>>> getAppointments({String? date});
   Future<Either<Failure, int>> addAppointment(Map<String, dynamic> appointment);
   Future<Either<Failure, void>> updateAppointmentStatus(int id, String status);
+  Future<Either<Failure, void>> updateAppointment(Map<String, dynamic> appointment);
+  Future<Either<Failure, void>> rescheduleAppointment(int id, String newDate, String newTimeSlot);
 
   // Waiting Room
   Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingRoomQueue();
@@ -144,6 +146,37 @@ class ClinicRepoImpl implements ClinicRepo {
       return const Right(null);
     } catch (e) {
       return Left(Failure(500, 'فشل تحديث حالة الموعد: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateAppointment(Map<String, dynamic> appointment) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final int id = appointment['id'];
+      await db.update('appointments', appointment, where: 'id = ?', whereArgs: [id]);
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل تحديث بيانات الموعد: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> rescheduleAppointment(int id, String newDate, String newTimeSlot) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'appointments',
+        {
+          'appointment_date': newDate,
+          'time_slot': newTimeSlot,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل إعادة جدولة الموعد: $e'));
     }
   }
 

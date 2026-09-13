@@ -94,6 +94,30 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     );
   }
 
+  Future<Either<Failure, void>> updateAppointment(Map<String, dynamic> appt) async {
+    return await fastFire(
+      type: ClinicApiType.updateAppointmentStatus,
+      fun: () => _clinicRepo.updateAppointment(appt),
+      onSuccess: (_) {
+        fetchAppointments();
+        fetchWaitingQueue();
+        fetchDashboardStats();
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> rescheduleAppointment(int id, String newDate, String newTimeSlot) async {
+    return await fastFire(
+      type: ClinicApiType.updateAppointmentStatus,
+      fun: () => _clinicRepo.rescheduleAppointment(id, newDate, newTimeSlot),
+      onSuccess: (_) {
+        fetchAppointments();
+        fetchWaitingQueue();
+        fetchDashboardStats();
+      },
+    );
+  }
+
   /// Alias for checking in a patient to consultation room
   Future<Either<Failure, void>> checkInPatient(int appointmentId) => updateAppointmentStatus(appointmentId, 'جاري الكشف');
 

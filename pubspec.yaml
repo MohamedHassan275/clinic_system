@@ -54,6 +54,7 @@ dependencies:
   file_picker: ^8.0.0
   pdf: ^3.10.8
   printing: ^5.11.1
+  url_launcher: ^6.3.0
 
   # Charts
   fl_chart: ^0.68.0
