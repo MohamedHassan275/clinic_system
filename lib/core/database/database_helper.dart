@@ -30,7 +30,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 5,
+      version: 10,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -49,11 +49,6 @@ class DatabaseHelper {
     // 1. Create new tables if not exists
     await _createTables(db);
 
-    // 2. Non-destructive column addition for existing old tables
-    // TODO (v6): Migrate old tables to add FK on clinic_id
-    // Currently: clinic_id added via ALTER TABLE without FK constraint
-    // Impact: ON DELETE CASCADE won't work on old tables (users, patients, etc.)
-    // Fix: Use Recreate Pattern in next major migration
     final oldTables = [
       'users',
       'shifts',
@@ -86,8 +81,9 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE users ADD COLUMN password_hash TEXT');
     } catch (_) {}
 
-    // 3. Create Indexes
+    // Create Indexes & Sanitize Settings Keys
     await _createIndexes(db);
+    await sanitizeExtraneousSettingsKeys(db);
   }
 
   Future<void> _checkAndSeedUsersIfEmpty(Database db) async {
@@ -125,7 +121,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. Users Table
+    // 2. Users Table (PROTECTED - Never Cleared)
     await db.execute('''
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -385,7 +381,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 14. Settings Table
+    // 14. Settings Table (Protected Core Keys)
     await db.execute('''
       CREATE TABLE IF NOT EXISTS settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -469,6 +465,96 @@ class DatabaseHelper {
         synced_at TEXT
       )
     ''');
+
+    // =========================================================================
+    // NEW TABLES FOR DOCTOR & SECRETARY PORTALS REBUILD
+    // =========================================================================
+
+    // 19. ICD-10 Codes Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS icd10_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        description_ar TEXT NOT NULL,
+        description_en TEXT,
+        category TEXT
+      )
+    ''');
+
+    // 20. Drug Interactions Table (Using FK to medicines(id))
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS drug_interactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        drug_a_id INTEGER NOT NULL,
+        drug_b_id INTEGER NOT NULL,
+        severity TEXT NOT NULL,
+        description TEXT NOT NULL,
+        FOREIGN KEY (drug_a_id) REFERENCES medicines(id) ON DELETE CASCADE,
+        FOREIGN KEY (drug_b_id) REFERENCES medicines(id) ON DELETE CASCADE,
+        UNIQUE(drug_a_id, drug_b_id)
+      )
+    ''');
+
+    // 21. Prescription Templates Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS prescription_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        doctor_id INTEGER NOT NULL,
+        template_name TEXT NOT NULL,
+        category TEXT,
+        notes TEXT,
+        FOREIGN KEY (doctor_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 22. Template Items Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS template_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_id INTEGER NOT NULL,
+        medicine_name TEXT NOT NULL,
+        dosage TEXT NOT NULL,
+        frequency TEXT NOT NULL,
+        duration TEXT NOT NULL,
+        FOREIGN KEY (template_id) REFERENCES prescription_templates(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 23. Patient Vitals Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS vitals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        appointment_id INTEGER,
+        bp_systolic INTEGER,
+        bp_diastolic INTEGER,
+        pulse_rate INTEGER,
+        temperature REAL,
+        blood_sugar INTEGER,
+        weight REAL,
+        height REAL,
+        bmi REAL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 24. Lab & Radiology Orders Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS lab_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        doctor_id INTEGER NOT NULL,
+        appointment_id INTEGER,
+        test_name TEXT NOT NULL,
+        category TEXT,
+        status TEXT DEFAULT 'pending',
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (doctor_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -478,6 +564,64 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_clinic_date ON invoices (clinic_id, created_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_patients_national_id ON patients (national_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_vitals_patient ON vitals (patient_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_lab_orders_patient ON lab_orders (patient_id)');
+  }
+
+  /// Clean extraneous settings keys, protecting only core settings keys
+  Future<void> sanitizeExtraneousSettingsKeys(DatabaseExecutor db) async {
+    final allowedKeys = [
+      'currency',
+      'language',
+      'working_hours',
+      'working_days',
+      'timezone',
+      'date_format',
+      'clinic_name',
+      'clinic_logo',
+      'legal_name',
+      'tax_id',
+      'commercial_register',
+    ];
+    final placeholders = allowedKeys.map((_) => '?').join(', ');
+    await db.delete(
+      'settings',
+      where: 'key NOT IN ($placeholders)',
+      whereArgs: allowedKeys,
+    );
+  }
+
+  /// Clear all transient test/demo data in operational tables while STRICTLY PROTECTING users, clinics, and settings
+  Future<void> sanitizeTransientOperationalData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final tablesToClear = [
+        'shifts',
+        'patients',
+        'appointments',
+        'prescriptions',
+        'prescription_items',
+        'invoices',
+        'inventory',
+        'lab_results',
+        'patient_attachments',
+        'medicines',
+        'services',
+        'audit_log',
+        'insurance_companies',
+        'patient_insurance',
+        'sync_queue',
+        'vitals',
+        'lab_orders',
+      ];
+
+      for (var table in tablesToClear) {
+        await txn.delete(table);
+      }
+
+      await sanitizeExtraneousSettingsKeys(txn);
+    });
+    AppLogger.info('Sanitized operational tables, protecting users, clinics, and core settings.');
   }
 
   Future<void> _seedInitialData(Database db) async {
