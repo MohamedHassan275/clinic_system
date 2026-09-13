@@ -340,12 +340,14 @@ class _BillingScreenState extends State<BillingScreen> {
       final double netPaid = paid - refunded;
 
       totalRevenue += netPaid;
+
       final method = PaymentMethod.fromString(inv['payment_method'] as String?);
-      if (method == PaymentMethod.cash) {
-        cashTotal += netPaid;
-      } else {
-        digitalTotal += netPaid;
-      }
+      final double invCash = (inv['cash_amount'] as num?)?.toDouble() ?? (method == PaymentMethod.cash ? paid : 0.0);
+      final double invCard = (inv['card_amount'] as num?)?.toDouble() ?? (method != PaymentMethod.cash && method != PaymentMethod.cash ? paid : 0.0);
+
+      final double ratio = paid > 0 ? (netPaid / paid) : 1.0;
+      cashTotal += (invCash * ratio);
+      digitalTotal += (invCard * ratio);
     }
 
     final items = [
@@ -422,6 +424,10 @@ class _BillingScreenState extends State<BillingScreen> {
     for (var inv in list) {
       final method = PaymentMethod.fromString(inv['payment_method'] as String?);
       switch (method) {
+        case PaymentMethod.split:
+          cashCount++;
+          cardCount++;
+          break;
         case PaymentMethod.cash:
           cashCount++;
           break;
@@ -646,6 +652,8 @@ class _BillingScreenState extends State<BillingScreen> {
     final totalCtrl = TextEditingController(text: '300');
     final discountCtrl = TextEditingController(text: '0');
     final paidCtrl = TextEditingController(text: '300');
+    final cashPortionCtrl = TextEditingController(text: '150');
+    final cardPortionCtrl = TextEditingController(text: '150');
     PaymentMethod selectedMethod = PaymentMethod.cash;
 
     showDialog(
@@ -656,7 +664,7 @@ class _BillingScreenState extends State<BillingScreen> {
           subtitle: 'أدخل تفاصيل تحصيل المبالغ المالية والخصومات الصادرة',
           icon: Icons.receipt_long_rounded,
           iconColor: AppColors.primary,
-          maxWidth: 520,
+          maxWidth: 540,
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -701,7 +709,16 @@ class _BillingScreenState extends State<BillingScreen> {
                 items: PaymentMethod.values.map((m) {
                   return DropdownMenuItem(value: m, child: Text(m.displayName));
                 }).toList(),
-                onChanged: (val) => setDialogState(() => selectedMethod = val!),
+                onChanged: (val) {
+                  setDialogState(() {
+                    selectedMethod = val!;
+                    if (selectedMethod == PaymentMethod.split) {
+                      final net = double.tryParse(paidCtrl.text) ?? 300.0;
+                      cashPortionCtrl.text = (net / 2).toStringAsFixed(0);
+                      cardPortionCtrl.text = (net / 2).toStringAsFixed(0);
+                    }
+                  });
+                },
               ),
               const SizedBox(height: 14),
 
@@ -717,7 +734,12 @@ class _BillingScreenState extends State<BillingScreen> {
                 onChanged: (val) {
                   final total = double.tryParse(val) ?? 0;
                   final discount = double.tryParse(discountCtrl.text) ?? 0;
-                  paidCtrl.text = (total - discount).clamp(0, double.infinity).toStringAsFixed(0);
+                  final net = (total - discount).clamp(0, double.infinity);
+                  paidCtrl.text = net.toStringAsFixed(0);
+                  if (selectedMethod == PaymentMethod.split) {
+                    cashPortionCtrl.text = (net / 2).toStringAsFixed(0);
+                    cardPortionCtrl.text = (net / 2).toStringAsFixed(0);
+                  }
                 },
               ),
               const SizedBox(height: 14),
@@ -734,7 +756,12 @@ class _BillingScreenState extends State<BillingScreen> {
                 onChanged: (val) {
                   final total = double.tryParse(totalCtrl.text) ?? 0;
                   final discount = double.tryParse(val) ?? 0;
-                  paidCtrl.text = (total - discount).clamp(0, double.infinity).toStringAsFixed(0);
+                  final net = (total - discount).clamp(0, double.infinity);
+                  paidCtrl.text = net.toStringAsFixed(0);
+                  if (selectedMethod == PaymentMethod.split) {
+                    cashPortionCtrl.text = (net / 2).toStringAsFixed(0);
+                    cardPortionCtrl.text = (net / 2).toStringAsFixed(0);
+                  }
                 },
               ),
               const SizedBox(height: 14),
@@ -749,6 +776,63 @@ class _BillingScreenState extends State<BillingScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
+
+              // Split Payment Fields
+              if (selectedMethod == PaymentMethod.split) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.purple.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('توزيع الدفع المجزأ (Split Payment):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.purple)),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: cashPortionCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: 'الجزء النقدي (كاش)',
+                                prefixIcon: const Icon(Icons.payments, color: Colors.amber),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onChanged: (val) {
+                                final netPaid = double.tryParse(paidCtrl.text) ?? 0;
+                                final cashVal = double.tryParse(val) ?? 0;
+                                cardPortionCtrl.text = (netPaid - cashVal).clamp(0, double.infinity).toStringAsFixed(0);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: cardPortionCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: 'جزء الكارت / الفيزا',
+                                prefixIcon: const Icon(Icons.credit_card, color: AppColors.primary),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onChanged: (val) {
+                                final netPaid = double.tryParse(paidCtrl.text) ?? 0;
+                                final cardVal = double.tryParse(val) ?? 0;
+                                cashPortionCtrl.text = (netPaid - cardVal).clamp(0, double.infinity).toStringAsFixed(0);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
           actions: [
@@ -765,13 +849,30 @@ class _BillingScreenState extends State<BillingScreen> {
                 final shift = SessionManager.instance.activeShift;
                 final nowStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
 
+                final totalPaid = double.tryParse(paidCtrl.text) ?? 300.0;
+                double cashAmt = 0.0;
+                double cardAmt = 0.0;
+
+                if (selectedMethod == PaymentMethod.cash) {
+                  cashAmt = totalPaid;
+                  cardAmt = 0.0;
+                } else if (selectedMethod == PaymentMethod.split) {
+                  cashAmt = double.tryParse(cashPortionCtrl.text) ?? (totalPaid / 2);
+                  cardAmt = double.tryParse(cardPortionCtrl.text) ?? (totalPaid / 2);
+                } else {
+                  cashAmt = 0.0;
+                  cardAmt = totalPaid;
+                }
+
                 await _viewModel.clinicCubit.createInvoice({
                   'patient_id': selectedPatientId ?? 1,
                   'user_id': user != null ? user['id'] : 1,
                   'shift_id': shift != null ? shift['id'] : 1,
                   'total_amount': double.tryParse(totalCtrl.text) ?? 300.0,
                   'discount': double.tryParse(discountCtrl.text) ?? 0.0,
-                  'paid_amount': double.tryParse(paidCtrl.text) ?? 300.0,
+                  'paid_amount': totalPaid,
+                  'cash_amount': cashAmt,
+                  'card_amount': cardAmt,
                   'payment_method': selectedMethod.dbValue,
                   'created_at': nowStr,
                 });

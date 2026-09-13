@@ -312,6 +312,8 @@ class DatabaseHelper {
         total_amount REAL NOT NULL,
         discount REAL DEFAULT 0.0,
         paid_amount REAL NOT NULL,
+        cash_amount REAL DEFAULT 0.0,
+        card_amount REAL DEFAULT 0.0,
         payment_method TEXT NOT NULL,
         status TEXT DEFAULT 'paid',
         created_at TEXT NOT NULL,
