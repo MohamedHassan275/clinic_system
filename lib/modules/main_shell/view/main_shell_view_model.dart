@@ -80,6 +80,12 @@ class MainShellViewModel extends BaseViewModel {
 
   static const List<NavigationMenuItem> secretaryMenuItems = [
     NavigationMenuItem(
+      key: 'reception',
+      title: 'منصة مكتب الاستقبال',
+      icon: Icons.desk_rounded,
+      targetRole: UserRole.secretary,
+    ),
+    NavigationMenuItem(
       key: 'waiting_room',
       title: 'شاشة الانتظار والاستقبال',
       icon: Icons.people_alt_rounded,

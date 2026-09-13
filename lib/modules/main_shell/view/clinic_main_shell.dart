@@ -13,6 +13,7 @@ import '../../clinic/view/screens/consultation_screen.dart';
 import '../../clinic/view/screens/dashboard_screen.dart';
 import '../../clinic/view/screens/emr_screen.dart';
 import '../../clinic/view/screens/inventory_screen.dart';
+import '../../clinic/view/screens/reception_screen.dart';
 import '../../clinic/view/screens/reports_screen.dart';
 import '../../clinic/view/screens/settings_screen.dart';
 import '../../clinic/view/screens/waiting_room_screen.dart';
@@ -53,6 +54,8 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
         switch (key) {
           case 'dashboard':
             return const DashboardScreen();
+          case 'reception':
+            return const ReceptionScreen();
           case 'appointments':
             return const AppointmentsScreen();
           case 'waiting_room':
