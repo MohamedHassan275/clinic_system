@@ -11,6 +11,7 @@ import '../../clinic/view/screens/appointments_screen.dart';
 import '../../clinic/view/screens/billing_screen.dart';
 import '../../clinic/view/screens/consultation_screen.dart';
 import '../../clinic/view/screens/dashboard_screen.dart';
+import '../../clinic/view/screens/doctor_dashboard_screen.dart';
 import '../../clinic/view/screens/emr_screen.dart';
 import '../../clinic/view/screens/inventory_screen.dart';
 import '../../clinic/view/screens/reception_screen.dart';
@@ -48,12 +49,16 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
   }
 
   Widget _getScreenWidget(String key) {
+    final role = _viewModel.activeRoleMode;
     return KeyedSubtree(
       key: ValueKey(key),
       child: () {
         switch (key) {
           case 'dashboard':
-            return const DashboardScreen();
+          case 'doctor_dashboard':
+            return role == UserRole.doctor
+                ? const DoctorDashboardScreen()
+                : const DashboardScreen();
           case 'reception':
             return const ReceptionScreen();
           case 'appointments':
@@ -73,7 +78,9 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
           case 'settings':
             return const SettingsScreen();
           default:
-            return const DashboardScreen();
+            return role == UserRole.doctor
+                ? const DoctorDashboardScreen()
+                : const DashboardScreen();
         }
       }(),
     );
