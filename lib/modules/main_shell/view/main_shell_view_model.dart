@@ -142,4 +142,12 @@ class MainShellViewModel extends BaseViewModel {
       notifyListeners();
     }
   }
+
+  void selectTabByKey(String key) {
+    final idx = allowedMenuItems.indexWhere((item) => item.key == key);
+    if (idx != -1) {
+      selectedIndex = idx;
+      notifyListeners();
+    }
+  }
 }

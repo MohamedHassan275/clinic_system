@@ -81,9 +81,28 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE users ADD COLUMN password_hash TEXT');
     } catch (_) {}
 
-    // Create Indexes & Sanitize Settings Keys
+    // Create Indexes, Sanitize Settings Keys & Convert Arabic DB values to English
     await _createIndexes(db);
     await sanitizeExtraneousSettingsKeys(db);
+    await sanitizeArabicValuesToEnglish(db);
+  }
+
+  Future<void> sanitizeArabicValuesToEnglish(Database db) async {
+    try {
+      await db.execute("UPDATE appointments SET status = 'waiting' WHERE status IN ('في الانتظار', 'منتظر')");
+      await db.execute("UPDATE appointments SET status = 'in_progress' WHERE status IN ('جاري الكشف', 'في الكشف')");
+      await db.execute("UPDATE appointments SET status = 'completed' WHERE status = 'مكتمل'");
+      await db.execute("UPDATE appointments SET status = 'cancelled' WHERE status = 'ملغى'");
+      
+      await db.execute("UPDATE appointments SET type = 'new_consultation' WHERE type = 'كشف جديد'");
+      await db.execute("UPDATE appointments SET type = 'follow_up' WHERE type IN ('إعادة / استشارة', 'استشارة')");
+      await db.execute("UPDATE appointments SET type = 'lab_review' WHERE type IN ('متابعة نتيجه تحاليل', 'متابعة نتائج')");
+
+      await db.execute("UPDATE patients SET gender = 'male' WHERE gender = 'ذكر'");
+      await db.execute("UPDATE patients SET gender = 'female' WHERE gender = 'أنثى'");
+    } catch (e) {
+      AppLogger.error('Failed sanitizing Arabic values to English in DB: $e');
+    }
   }
 
   Future<void> _checkAndSeedUsersIfEmpty(Database db) async {

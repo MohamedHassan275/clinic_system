@@ -4,6 +4,8 @@ import 'package:sqflite/sqflite.dart';
 import '../../../../core/common/error_handler/failure.dart';
 import '../../../../core/database/database_helper.dart';
 
+import '../../../../core/enums/appointment_enums.dart';
+
 abstract class ClinicRepo {
   // Dashboard
   Future<Either<Failure, Map<String, dynamic>>> getDashboardStats();
@@ -137,7 +139,8 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, void>> updateAppointmentStatus(int id, String status) async {
     try {
       final db = await DatabaseHelper.instance.database;
-      await db.update('appointments', {'status': status}, where: 'id = ?', whereArgs: [id]);
+      final dbStatus = AppointmentStatus.fromString(status).dbValue;
+      await db.update('appointments', {'status': dbStatus}, where: 'id = ?', whereArgs: [id]);
       return const Right(null);
     } catch (e) {
       return Left(Failure(500, 'فشل تحديث حالة الموعد: $e'));
@@ -152,7 +155,7 @@ class ClinicRepoImpl implements ClinicRepo {
         SELECT a.*, p.name as patient_name, p.phone as patient_phone
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
-        WHERE a.status IN ('منتظر', 'في الكشف')
+        WHERE a.status IN ('waiting', 'in_progress', 'منتظر', 'في الكشف', 'في الانتظار', 'جاري الكشف')
         ORDER BY a.id ASC
       ''');
       return Right(res);

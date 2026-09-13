@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../../../core/common/widgets/app_dialog.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/enums/appointment_enums.dart';
 import '../../../../core/responsive/responsive_layout.dart';
 import '../../../../core/security/shift_guard.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../shared/cubit/block_builder_widget.dart';
 import '../../data/cubit/clinic_cubit.dart';
+import '../../../main_shell/view/main_shell_view_model.dart';
 import '../clinic_view_model.dart';
 
 class ReceptionScreen extends StatefulWidget {
@@ -320,9 +322,9 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
 
   Widget _buildKpiSummaryRow({bool isMobile = false}) {
     final queue = _viewModel.clinicCubit.waitingQueue;
-    final int waitingCount = queue.where((q) => q['status'] == 'في الانتظار').length;
-    final int inConsultationCount = queue.where((q) => q['status'] == 'جاري الكشف').length;
-    final int completedCount = queue.where((q) => q['status'] == 'مكتمل').length;
+    final int waitingCount = queue.where((q) => AppointmentStatus.fromString(q['status']).isWaiting).length;
+    final int inConsultationCount = queue.where((q) => AppointmentStatus.fromString(q['status']).isInProgress).length;
+    final int completedCount = queue.where((q) => AppointmentStatus.fromString(q['status']).isCompleted).length;
 
     final items = [
       _KpiData('في الانتظار', waitingCount.toString(), Icons.hourglass_empty_rounded, Colors.amber),
@@ -397,7 +399,7 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
           children: [
             _buildSectionTitle(
               title: 'إجراءات الاستقبال السريعة',
-              subtitle: 'اختصارات التعامل اليومية',
+              subtitle: 'اختصارات التعامل اليومية والتحصيل',
               icon: Icons.flash_on_rounded,
             ),
             const SizedBox(height: 14),
@@ -414,6 +416,20 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
               color: AppColors.secondary,
               onPressed: () => _onBookAppointment(),
             ),
+            const SizedBox(height: 10),
+            _buildActionButton(
+              label: '💰 تحصيل فاتورة / الحسابات',
+              icon: Icons.receipt_long_rounded,
+              color: Colors.teal,
+              onPressed: () => sl<MainShellViewModel>().selectTabByKey('billing'),
+            ),
+            const SizedBox(height: 10),
+            _buildActionButton(
+              label: '👤 البحث في ملفات المرضى',
+              icon: Icons.folder_shared_rounded,
+              color: Colors.blueGrey,
+              onPressed: () => sl<MainShellViewModel>().selectTabByKey('emr'),
+            ),
           ],
         ),
       ),
@@ -421,23 +437,44 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
   }
 
   Widget _buildQuickActionButtonsBar({bool isMobile = false}) {
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        Expanded(
+        SizedBox(
+          width: isMobile ? 160 : 180,
           child: _buildActionButton(
-            label: isMobile ? '+ مريض' : '+ تسجيل مريض جديد',
+            label: isMobile ? '+ مريض' : '+ تسجيل مريض',
             icon: Icons.person_add_alt_1_rounded,
             color: AppColors.primary,
             onPressed: () => _onRegisterNewPatient(),
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
+        SizedBox(
+          width: isMobile ? 160 : 180,
           child: _buildActionButton(
-            label: isMobile ? '+ موعد' : '+ حجز موعد جديد',
+            label: isMobile ? '+ موعد' : '+ حجز موعد',
             icon: Icons.add_alarm_rounded,
             color: AppColors.secondary,
             onPressed: () => _onBookAppointment(),
+          ),
+        ),
+        SizedBox(
+          width: isMobile ? 160 : 180,
+          child: _buildActionButton(
+            label: isMobile ? '💰 تحصيل' : '💰 الحسابات',
+            icon: Icons.receipt_long_rounded,
+            color: Colors.teal,
+            onPressed: () => sl<MainShellViewModel>().selectTabByKey('billing'),
+          ),
+        ),
+        SizedBox(
+          width: isMobile ? 160 : 180,
+          child: _buildActionButton(
+            label: isMobile ? '👤 ملفات' : '👤 ملفات المرضى',
+            icon: Icons.folder_shared_rounded,
+            color: Colors.blueGrey,
+            onPressed: () => sl<MainShellViewModel>().selectTabByKey('emr'),
           ),
         ),
       ],
@@ -485,11 +522,12 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
       separatorBuilder: (ctx, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final item = queue[index];
-        final String status = item['status'] ?? 'في الانتظار';
+        final apptStatus = AppointmentStatus.fromString(item['status'] as String?);
+        final apptType = AppointmentType.fromString(item['type'] as String?);
 
         Color statusColor = Colors.amber;
-        if (status == 'جاري الكشف') statusColor = AppColors.primary;
-        if (status == 'مكتمل') statusColor = AppColors.success;
+        if (apptStatus.isInProgress) statusColor = AppColors.primary;
+        if (apptStatus.isCompleted) statusColor = AppColors.success;
 
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -501,16 +539,16 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
             ),
           ),
           title: Text(item['patient_name'] ?? 'مريض', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          subtitle: Text('النوع: ${item['type'] ?? 'كشف'} | الوقت: ${item['time_slot'] ?? 'غير محدد'}', style: const TextStyle(fontSize: 12)),
+          subtitle: Text('النوع: ${apptType.displayName} | الوقت: ${item['time_slot'] ?? 'غير محدد'}', style: const TextStyle(fontSize: 12)),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                child: Text(status, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11)),
+                child: Text(apptStatus.displayName, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11)),
               ),
-              if (status == 'في الانتظار') ...[
+              if (apptStatus.isWaiting) ...[
                 const SizedBox(width: 6),
                 IconButton(
                   icon: const Icon(Icons.login, color: AppColors.primary, size: 20),
@@ -518,8 +556,7 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
                   onPressed: () async {
                     if (!ShiftGuard.checkShiftOrWarn(context)) return;
                     final int apptId = item['id'] as int;
-                    await _viewModel.clinicCubit.updateAppointmentStatus(apptId, 'جاري الكشف');
-                    _viewModel.clinicCubit.fetchWaitingQueue();
+                    await _viewModel.clinicCubit.checkInPatient(apptId);
                   },
                 ),
               ],
@@ -679,12 +716,12 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary),
               onPressed: () async {
                 if (selectedPatientId == null) return;
-                await _viewModel.clinicCubit.addAppointment({
+                await _viewModel.clinicCubit.bookAppointment({
                   'patient_id': selectedPatientId,
                   'appointment_date': DateTime.now().toIso8601String().split('T')[0],
                   'time_slot': '10:00 AM',
-                  'type': appointmentType,
-                  'status': 'في الانتظار',
+                  'type': AppointmentType.fromString(appointmentType).dbValue,
+                  'status': AppointmentStatus.waiting.dbValue,
                   'fee': 200.0,
                 });
 

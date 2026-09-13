@@ -53,6 +53,9 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     );
   }
 
+  /// Convenience helper for total today's revenue
+  double getTodayRevenue() => (dashboardStats['today_revenue'] as num?)?.toDouble() ?? 0.0;
+
   Future<Either<Failure, List<Map<String, dynamic>>>> fetchAppointments({String? date}) async {
     return await fastFire(
       type: ClinicApiType.getAppointments,
@@ -60,6 +63,9 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
       onSuccess: (list) => appointments = list,
     );
   }
+
+  /// Alias for loading today's appointments
+  Future<Either<Failure, List<Map<String, dynamic>>>> loadTodayAppointments({String? date}) => fetchAppointments(date: date);
 
   Future<Either<Failure, int>> addAppointment(Map<String, dynamic> appt) async {
     return await fastFire(
@@ -73,6 +79,9 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     );
   }
 
+  /// Alias for booking an appointment
+  Future<Either<Failure, int>> bookAppointment(Map<String, dynamic> appt) => addAppointment(appt);
+
   Future<Either<Failure, void>> updateAppointmentStatus(int id, String status) async {
     return await fastFire(
       type: ClinicApiType.updateAppointmentStatus,
@@ -85,6 +94,9 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     );
   }
 
+  /// Alias for checking in a patient to consultation room
+  Future<Either<Failure, void>> checkInPatient(int appointmentId) => updateAppointmentStatus(appointmentId, 'جاري الكشف');
+
   Future<Either<Failure, List<Map<String, dynamic>>>> fetchWaitingQueue() async {
     return await fastFire(
       type: ClinicApiType.getWaitingRoom,
@@ -92,6 +104,9 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
       onSuccess: (list) => waitingQueue = list,
     );
   }
+
+  /// Alias for loading waiting list
+  Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingList() => fetchWaitingQueue();
 
   Future<Either<Failure, List<Map<String, dynamic>>>> fetchPatients({String? query}) async {
     return await fastFire(
