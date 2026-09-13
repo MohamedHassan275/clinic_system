@@ -89,17 +89,44 @@ class DatabaseHelper {
 
   Future<void> sanitizeArabicValuesToEnglish(Database db) async {
     try {
+      // Appointments status, type, priority
       await db.execute("UPDATE appointments SET status = 'waiting' WHERE status IN ('في الانتظار', 'منتظر')");
       await db.execute("UPDATE appointments SET status = 'in_progress' WHERE status IN ('جاري الكشف', 'في الكشف')");
       await db.execute("UPDATE appointments SET status = 'completed' WHERE status = 'مكتمل'");
       await db.execute("UPDATE appointments SET status = 'cancelled' WHERE status = 'ملغى'");
+      await db.execute("UPDATE appointments SET status = 'no_show' WHERE status = 'لم يحضر'");
       
       await db.execute("UPDATE appointments SET type = 'new_consultation' WHERE type = 'كشف جديد'");
       await db.execute("UPDATE appointments SET type = 'follow_up' WHERE type IN ('إعادة / استشارة', 'استشارة')");
       await db.execute("UPDATE appointments SET type = 'lab_review' WHERE type IN ('متابعة نتيجه تحاليل', 'متابعة نتائج')");
 
+      await db.execute("UPDATE appointments SET priority = 'normal' WHERE priority = 'عادي'");
+      await db.execute("UPDATE appointments SET priority = 'urgent' WHERE priority = 'مستعجل'");
+      await db.execute("UPDATE appointments SET priority = 'emergency' WHERE priority = 'حالة طارئة'");
+
+      // Users role
+      await db.execute("UPDATE users SET role = 'secretary' WHERE role IN ('receptionist', 'استقبال', 'سكرتير')");
+      await db.execute("UPDATE users SET role = 'doctor' WHERE role IN ('طبيب', 'دكتور')");
+      await db.execute("UPDATE users SET role = 'super_admin' WHERE role IN ('admin', 'مدير', 'سوبر أدمن')");
+
+      // Invoices payment method
+      await db.execute("UPDATE invoices SET payment_method = 'cash' WHERE payment_method IN ('نقدي (كاش)', 'كاش', 'نقدي')");
+      await db.execute("UPDATE invoices SET payment_method = 'card' WHERE payment_method IN ('فيزا / كارت', 'فيزا', 'بطاقة')");
+      await db.execute("UPDATE invoices SET payment_method = 'transfer' WHERE payment_method = 'تحويل بنكي'");
+      await db.execute("UPDATE invoices SET payment_method = 'insurance' WHERE payment_method IN ('تأمين صحي', 'تأمين')");
+
+      // Patients demographics
       await db.execute("UPDATE patients SET gender = 'male' WHERE gender = 'ذكر'");
       await db.execute("UPDATE patients SET gender = 'female' WHERE gender = 'أنثى'");
+      await db.execute("UPDATE patients SET female_status = 'normal' WHERE female_status = 'طبيعي'");
+      await db.execute("UPDATE patients SET female_status = 'pregnant' WHERE female_status = 'حامل'");
+      await db.execute("UPDATE patients SET female_status = 'lactating' WHERE female_status = 'مرضع'");
+      await db.execute("UPDATE patients SET contract_entity = 'cash' WHERE contract_entity IN ('نقدي (خاص)', 'نقدي')");
+
+      // Lab results status
+      await db.execute("UPDATE lab_results SET status = 'normal' WHERE status = 'طبيعي'");
+      await db.execute("UPDATE lab_results SET status = 'high' WHERE status = 'مرتفع'");
+      await db.execute("UPDATE lab_results SET status = 'low' WHERE status = 'منخفض'");
     } catch (e) {
       AppLogger.error('Failed sanitizing Arabic values to English in DB: $e');
     }
