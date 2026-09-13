@@ -37,3 +37,23 @@ enum LabOrderPriority {
     return LabOrderPriority.normal;
   }
 }
+
+enum LabResultStatus {
+  normal('normal', 'طبيعي'),
+  high('high', 'مرتفع'),
+  low('low', 'منخفض');
+
+  final String dbValue;
+  final String displayName;
+
+  const LabResultStatus(this.dbValue, this.displayName);
+
+  static LabResultStatus fromString(String? val) {
+    if (val == null || val.isEmpty) return LabResultStatus.normal;
+    final v = val.trim().toLowerCase();
+    if (v == 'high' || v == 'مرتفع') return LabResultStatus.high;
+    if (v == 'low' || v == 'منخفض') return LabResultStatus.low;
+    return LabResultStatus.normal;
+  }
+}
+
