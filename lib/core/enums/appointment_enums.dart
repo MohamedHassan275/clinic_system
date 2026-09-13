@@ -62,6 +62,10 @@ enum AppointmentPriority {
     if (p == 'emergency' || p == 'stat' || p == 'حالة طارئة' || p == 'طارئ') return AppointmentPriority.emergency;
     return AppointmentPriority.normal;
   }
+
+  bool get isNormal => this == AppointmentPriority.normal;
+  bool get isUrgent => this == AppointmentPriority.urgent;
+  bool get isEmergency => this == AppointmentPriority.emergency;
 }
 
 enum PatientGender {
