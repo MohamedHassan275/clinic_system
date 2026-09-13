@@ -32,10 +32,13 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final bool isMobile = media.size.width < 768;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(isMobile ? 14.0 : 24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -45,22 +48,23 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                 const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('غرفة الانتظار والاستقبال', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text('غرفة الانتظار والاستقبال', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                     SizedBox(height: 4),
-                    Text('متابعة دورية المرضى بالترتيب ونداء الحالات للغرفة الطبية', style: TextStyle(color: AppColors.textSecondary)),
+                    Text('متابعة دورية المرضى بالترتيب ونداء الحالات للغرفة الطبية', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                   ],
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: () => _viewModel.clinicCubit.fetchWaitingQueue(),
+                  tooltip: 'تحديث الدور',
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Expanded(
               child: BlockBuilderWidget<ClinicCubit, ClinicApiType>(
                 types: const [ClinicApiType.getWaitingRoom],
-                body: (_) => _buildQueueList(),
+                body: (_) => _buildQueueList(isMobile),
                 loading: (_) => const Center(child: CircularProgressIndicator()),
               ),
             ),
@@ -70,7 +74,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     );
   }
 
-  Widget _buildQueueList() {
+  Widget _buildQueueList(bool isMobile) {
     final queue = _viewModel.clinicCubit.waitingQueue;
     if (queue.isEmpty) {
       return const Center(
@@ -95,35 +99,44 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
           final item = queue[index];
           final bool isInside = item['status'] == 'في الكشف';
           return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: CircleAvatar(
-              radius: 22,
+              radius: 20,
               backgroundColor: isInside ? AppColors.secondary : AppColors.primaryLight,
               child: Text('${index + 1}', style: TextStyle(color: isInside ? Colors.white : AppColors.primary, fontWeight: FontWeight.bold)),
             ),
-            title: Text(item['patient_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            subtitle: Text('رقم الموعد: #${item['id']} | الهاتف: ${item['patient_phone']}'),
+            title: Text(item['patient_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            subtitle: Text('رقم الموعد: #${item['id']} | الهاتف: ${item['patient_phone'] ?? 'بدون'}'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (!isInside)
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.secondary,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                     onPressed: () async {
                       await _viewModel.clinicCubit.updateAppointmentStatus(item['id'] as int, 'في الكشف');
                       _viewModel.clinicCubit.fetchWaitingQueue();
                     },
                     icon: const Icon(Icons.meeting_room, size: 16, color: Colors.white),
-                    label: const Text('إدخال للكشف', style: TextStyle(color: Colors.white)),
+                    label: Text(isMobile ? 'دخول' : 'إدخال للكشف', style: const TextStyle(color: Colors.white, fontSize: 13)),
                   )
                 else
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                     onPressed: () async {
                       await _viewModel.clinicCubit.updateAppointmentStatus(item['id'] as int, 'مكتمل');
                       _viewModel.clinicCubit.fetchWaitingQueue();
                     },
                     icon: const Icon(Icons.check, size: 16, color: Colors.white),
-                    label: const Text('إنهاء الكشف', style: TextStyle(color: Colors.white)),
+                    label: Text(isMobile ? 'إنهاء' : 'إنهاء الكشف', style: const TextStyle(color: Colors.white, fontSize: 13)),
                   ),
               ],
             ),

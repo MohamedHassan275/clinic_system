@@ -25,6 +25,8 @@ enum ClinicApiType {
   addUser,
   updateUser,
   updatePermissions,
+  getClinicInfo,
+  updateClinicInfo,
 }
 
 class ClinicCubit extends BaseCubit<ClinicApiType> {
@@ -41,6 +43,7 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
   List<Map<String, dynamic>> inventoryItems = [];
   Map<String, dynamic> reportsData = {};
   List<Map<String, dynamic>> usersList = [];
+  Map<String, dynamic>? clinicInfo;
 
   Future<Either<Failure, Map<String, dynamic>>> fetchDashboardStats() async {
     return await fastFire(
@@ -267,6 +270,22 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
       type: ClinicApiType.updateUser,
       fun: () => _clinicRepo.deleteUser(userId),
       onSuccess: (_) => fetchUsers(),
+    );
+  }
+
+  Future<Either<Failure, Map<String, dynamic>>> fetchClinicInfo() async {
+    return await fastFire(
+      type: ClinicApiType.getClinicInfo,
+      fun: () => _clinicRepo.getClinicInfo(),
+      onSuccess: (info) => clinicInfo = info,
+    );
+  }
+
+  Future<Either<Failure, void>> updateClinicInfo(Map<String, dynamic> info) async {
+    return await fastFire(
+      type: ClinicApiType.updateClinicInfo,
+      fun: () => _clinicRepo.updateClinicInfo(info),
+      onSuccess: (_) => fetchClinicInfo(),
     );
   }
 }

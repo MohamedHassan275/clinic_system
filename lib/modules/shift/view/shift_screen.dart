@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/common/widgets/app_dialog.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../main_shell/view/clinic_main_shell.dart';
 import '../../shared/cubit/base_cubit.dart';
 import '../data/cubit/shift_cubit.dart';
 import 'shift_view_model.dart';
-import '../../main_shell/view/clinic_main_shell.dart';
-import '../../auth/view/login_screen.dart';
 
 class ShiftScreen extends StatefulWidget {
   const ShiftScreen({super.key});
@@ -25,7 +24,6 @@ class _ShiftScreenState extends State<ShiftScreen> {
     _viewModel = sl<ShiftViewModel>()..updateRefresh(() {
       if (mounted) setState(() {});
     });
-    _viewModel.checkInitialShift();
   }
 
   @override
@@ -40,265 +38,178 @@ class _ShiftScreenState extends State<ShiftScreen> {
     );
   }
 
-  void _navigateToLogin() {
-    SessionManager.instance.clearSession();
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = SessionManager.instance.currentUser;
-    final hasShift = SessionManager.instance.hasActiveShift;
     final activeShift = SessionManager.instance.activeShift;
+    final bool hasShift = SessionManager.instance.hasActiveShift;
+    final media = MediaQuery.of(context);
+    final bool isMobile = media.size.width < 768;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('إدارة الورديات والتدفق المالي'),
-        backgroundColor: AppColors.surface,
+        title: const Text('إدارة ورشات العمل والصندوق'),
+        centerTitle: false,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: AppColors.error),
-            tooltip: 'تسجيل الخروج',
-            onPressed: _navigateToLogin,
-          ),
+          if (hasShift)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                onPressed: _navigateToMainShell,
+                icon: const Icon(Icons.dashboard_rounded, color: Colors.white, size: 18),
+                label: const Text('لوحة العيادة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
         ],
       ),
-      body: BlocProvider.value(
-        value: _viewModel.shiftCubit,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final bool isDesktop = constraints.maxWidth >= 900;
-            if (isDesktop) {
-              return Row(
-                children: [
-                  // Right Pane: Medical Shift Illustration & Value Points (45%)
-                  Expanded(
-                    flex: 45,
-                    child: Container(
-                      margin: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.sidebarBackground, Color(0xFF1E3A8A)],
-                          begin: Alignment.topRight,
-                          end: Alignment.bottomLeft,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(isMobile ? 16.0 : 32.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 580),
+            child: Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Padding(
+                padding: EdgeInsets.all(isMobile ? 20.0 : 32.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: hasShift ? AppColors.success.withValues(alpha: 0.15) : AppColors.primaryLight,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            hasShift ? Icons.check_circle_rounded : Icons.access_time_filled_rounded,
+                            color: hasShift ? AppColors.success : AppColors.primary,
+                            size: 32,
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(20),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                hasShift ? 'الوردية الحالية نشطة ومفتوحة' : 'فتح وردية عمل جديدة',
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'المستخدم الحالي: ${user != null ? (user['full_name'] ?? 'غير معروف') : 'غير معروف'}',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 36),
+                    if (hasShift && activeShift != null) ...[
+                      _buildActiveShiftInfo(activeShift, user),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: _navigateToMainShell,
+                          icon: const Icon(Icons.dashboard_rounded, color: Colors.white),
+                          label: const Text(
+                            'الدخول إلى لوحة نظام العيادة',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ),
                       ),
-                      padding: const EdgeInsets.all(36),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                          side: const BorderSide(color: AppColors.error),
+                          minimumSize: const Size(double.infinity, 46),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () => _showCloseShiftDialog(context),
+                        icon: const Icon(Icons.lock_clock),
+                        label: const Text('إغلاق الوردية الحالية الآن', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ] else ...[
+                      const Text(
+                        'ملاحظة: لإنشاء الحجوزات وإصدار الفواتير والروشتات، يلزم بدء وردية مالية وتحديد عهدة الصندوق والوقت.',
+                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.point_of_sale_rounded, size: 56, color: AppColors.accent),
-                          ),
-                          const SizedBox(height: 24),
-                          const Text(
-                            'إدارة الورديات وتدفقات الصندوق',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: TextFormField(
+                              controller: _viewModel.dateController,
+                              enabled: false,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                labelText: 'تاريخ الوردية (ثابت)',
+                                prefixIcon: const Icon(Icons.calendar_today_rounded, color: AppColors.primary),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'نظام متكامل لتسجيل عهدة الصندوق، تتبع الوقت والتاريخ، ومطابقة إيرادات الكشوفات والفواتير بدقة فائقة.',
-                            style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _viewModel.timeController,
+                              readOnly: true,
+                              onTap: () => _viewModel.selectStartTime(context),
+                              decoration: InputDecoration(
+                                labelText: 'وقت بدء الوردية',
+                                prefixIcon: const Icon(Icons.access_time_rounded, color: AppColors.secondary),
+                                suffixIcon: const Icon(Icons.arrow_drop_down),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 36),
-                          _buildBrandingPoint('تسجيل وقت وتاريخ بدء الوردية بدقة'),
-                          const SizedBox(height: 12),
-                          _buildBrandingPoint('مطابقة العهدة النقدية الافتتاحية والختامية'),
-                          const SizedBox(height: 12),
-                          _buildBrandingPoint('حظر أية حجوزات أو فواتير بدون وردية مفعّلة'),
                         ],
                       ),
-                    ),
-                  ),
-                  // Left Pane: Shift Card Form (55%)
-                  Expanded(
-                    flex: 55,
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(24.0),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 580),
-                          child: _buildShiftCard(user, hasShift, activeShift),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _viewModel.startingCashController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'العهدة النقدية الافتتاحية للصندوق (ج.م)',
+                          prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
-                    ),
-                  ),
-                ],
-              );
-            } else {
-              // Mobile Layout: Single Column Centered
-              return Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20.0),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 540),
-                    child: _buildShiftCard(user, hasShift, activeShift),
-                  ),
-                ),
-              );
-            }
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBrandingPoint(String text) {
-    return Row(
-      children: [
-        const Icon(Icons.check_circle_rounded, color: AppColors.accent, size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 14)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShiftCard(Map<String, dynamic>? user, bool hasShift, Map<String, dynamic>? activeShift) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: Padding(
-        padding: const EdgeInsets.all(28.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: hasShift ? AppColors.primaryLight : const Color(0xFFFFF3E0),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(
-                    hasShift ? Icons.check_circle_rounded : Icons.access_time_filled_rounded,
-                    color: hasShift ? AppColors.primary : Colors.orange[800],
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        hasShift ? 'الوردية الحالية نشطة ومفتوحة' : 'فتح وردية عمل جديدة',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _viewModel.notesController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'ملاحظات إضافية عند بدء الوردية (اختياري)',
+                          prefixIcon: const Icon(Icons.notes_rounded),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'المستخدم الحالي: ${user != null ? user['full_name'] : 'غير معروف'}',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                      ),
+                      const SizedBox(height: 24),
+                      _buildStartShiftButton(),
                     ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-            const Divider(height: 36),
-            if (hasShift && activeShift != null) ...[
-              _buildActiveShiftInfo(activeShift, user),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                  ),
-                  onPressed: _navigateToMainShell,
-                  icon: const Icon(Icons.dashboard_rounded, color: Colors.white),
-                  label: const Text(
-                    'الدخول إلى لوحة نظام العيادة',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  side: const BorderSide(color: AppColors.error),
-                  minimumSize: const Size(double.infinity, 46),
-                ),
-                onPressed: () => _showCloseShiftDialog(context),
-                icon: const Icon(Icons.lock_clock),
-                label: const Text('إغلاق الوردية الحالية الآن'),
-              ),
-            ] else ...[
-              const Text(
-                'ملاحظة: لإنشاء الحجوزات وإصدار الفواتير والروشتات، يلزم بدء وردية مالية وتحديد عهدة الصندوق والوقت.',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
-              ),
-              const SizedBox(height: 20),
-              // Date & Time Row above Cash input
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _viewModel.dateController,
-                      enabled: false,
-                      readOnly: true,
-                      decoration: const InputDecoration(
-                        labelText: 'تاريخ الوردية (ثابت)',
-                        prefixIcon: Icon(Icons.calendar_today_rounded, color: AppColors.primary),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _viewModel.timeController,
-                      readOnly: true,
-                      onTap: () => _viewModel.selectStartTime(context),
-                      decoration: const InputDecoration(
-                        labelText: 'وقت بدء الوردية',
-                        prefixIcon: Icon(Icons.access_time_rounded, color: AppColors.secondary),
-                        suffixIcon: Icon(Icons.arrow_drop_down),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _viewModel.startingCashController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'العهدة النقدية الافتتاحية للصندوق (ج.م)',
-                  prefixIcon: Icon(Icons.account_balance_wallet_outlined),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _viewModel.notesController,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'ملاحظات إضافية عند بدء الوردية (اختياري)',
-                  prefixIcon: Icon(Icons.notes_rounded),
-                ),
-              ),
-              const SizedBox(height: 24),
-              _buildStartShiftButton(),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -314,7 +225,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
       ),
       child: Column(
         children: [
-          _buildInfoRow('المستخدم مسؤول الوردية:', user != null ? user['full_name'] : 'غير معروف'),
+          _buildInfoRow('المستخدم مسؤول الوردية:', user != null ? (user['full_name'] ?? 'غير معروف') : 'غير معروف'),
           const SizedBox(height: 10),
           _buildInfoRow('رقم الوردية:', '#${shift['id']}'),
           const SizedBox(height: 10),
@@ -341,7 +252,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
           child: Text(
             value,
             textAlign: TextAlign.left,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
         ),
       ],
@@ -366,13 +277,14 @@ class _ShiftScreenState extends State<ShiftScreen> {
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
         onPressed: () {
           _viewModel.startNewShift(
             onSuccess: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('تم بدء الوردية وحفظ البيانات في قاعدة البيانات بنجاح!'),
+                  content: Text('تم بدء الوردية وحفظ البيانات بنجاح!'),
                   backgroundColor: AppColors.success,
                 ),
               );
@@ -397,20 +309,22 @@ class _ShiftScreenState extends State<ShiftScreen> {
   void _showCloseShiftDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('إغلاق الوردية المالية'),
+      builder: (dialogContext) => AppDialog(
+        title: 'إغلاق الوردية المالية',
+        subtitle: 'يرجى جرد النقدية وإدخال المبلغ النهائي عند إغلاق الصندوق',
+        icon: Icons.lock_clock_rounded,
+        iconColor: AppColors.error,
+        maxWidth: 460,
         content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('يرجى جرد الصندوق وإدخال المبلغ النهائي المتوفر:'),
-            const SizedBox(height: 12),
             TextField(
               controller: _viewModel.endingCashController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'المبلغ الإجمالي في النقدية عند الإغلاق (ج.م)',
-                prefixIcon: Icon(Icons.attach_money),
+              decoration: InputDecoration(
+                labelText: 'المبلغ الإجمالي في النقدية عند الإغلاق (ج.م) *',
+                prefixIcon: const Icon(Icons.attach_money),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
           ],
@@ -418,10 +332,15 @@ class _ShiftScreenState extends State<ShiftScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('إلغاء'),
+            child: const Text('إلغاء', style: TextStyle(color: AppColors.textSecondary)),
           ),
+          const SizedBox(width: 8),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () {
               Navigator.of(dialogContext).pop();
               _viewModel.closeCurrentShift(
@@ -438,7 +357,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                 },
               );
             },
-            child: const Text('تأكيد الإغلاق', style: TextStyle(color: Colors.white)),
+            child: const Text('تأكيد الإغلاق', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

@@ -50,6 +50,8 @@ abstract class ClinicRepo {
   Future<Either<Failure, void>> updateUser(Map<String, dynamic> user);
   Future<Either<Failure, void>> updateUserPermissions(int userId, List<String> permissions);
   Future<Either<Failure, void>> deleteUser(int userId);
+  Future<Either<Failure, Map<String, dynamic>>> getClinicInfo();
+  Future<Either<Failure, void>> updateClinicInfo(Map<String, dynamic> clinicInfo);
 }
 
 class ClinicRepoImpl implements ClinicRepo {
@@ -399,6 +401,29 @@ class ClinicRepoImpl implements ClinicRepo {
       return const Right(null);
     } catch (e) {
       return Left(Failure(500, 'فشل حذف حساب المستخدم: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Map<String, dynamic>>> getClinicInfo() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final res = await db.query('clinics', where: 'id = 1');
+      if (res.isNotEmpty) return Right(res.first);
+      return const Right({'name': 'عيادتي الذكية', 'phone': '01000000000', 'address': 'الفرع الرئيسي'});
+    } catch (e) {
+      return Left(Failure(500, 'فشل جلب بيانات العيادة: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateClinicInfo(Map<String, dynamic> clinicInfo) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.update('clinics', clinicInfo, where: 'id = 1');
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل تحديث بيانات العيادة: $e'));
     }
   }
 }
