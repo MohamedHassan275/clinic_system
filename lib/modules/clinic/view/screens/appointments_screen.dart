@@ -673,11 +673,15 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     final patients = _viewModel.clinicCubit.patients;
     final users = _viewModel.clinicCubit.usersList;
 
+    final List<String> doctorNames = users.isNotEmpty
+        ? users.map((u) => (u['full_name'] as String? ?? 'د. محمد حسن')).toSet().toList()
+        : ['د. محمد حسن'];
+
     int? selectedPatientId = patients.isNotEmpty ? patients.first['id'] as int : null;
     AppointmentType selectedType = AppointmentType.newConsultation;
     AppointmentPriority selectedPriority = AppointmentPriority.normal;
 
-    final String defaultDoctorName = users.isNotEmpty ? (users.first['full_name'] ?? 'د. محمد حسن') : 'د. محمد حسن';
+    final String defaultDoctorName = doctorNames.first;
     String selectedDoctor = defaultDoctorName;
 
     final notesController = TextEditingController();
@@ -818,15 +822,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                     prefixIcon: const Icon(Icons.badge_outlined),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  items: users.isEmpty
-                      ? const [DropdownMenuItem(value: 'د. محمد حسن', child: Text('د. محمد حسن'))]
-                      : users.map((u) {
-                          final name = u['full_name'] ?? 'د. محمد حسن';
-                          return DropdownMenuItem<String>(
-                            value: name,
-                            child: Text(name.startsWith('د.') ? name : 'د. $name'),
-                          );
-                        }).toList(),
+                  items: doctorNames.map((name) {
+                    return DropdownMenuItem<String>(
+                      value: name,
+                      child: Text(name.startsWith('د.') ? name : 'د. $name'),
+                    );
+                  }).toList(),
                   onChanged: (val) => setDialogState(() => selectedDoctor = val!),
                 ),
                 const SizedBox(height: 14),
