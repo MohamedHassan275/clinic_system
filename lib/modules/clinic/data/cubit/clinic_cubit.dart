@@ -153,9 +153,9 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     return await fastFire(
       type: ClinicApiType.addPatient,
       fun: () => _clinicRepo.addPatient(patient),
-      onSuccess: (_) {
-        fetchPatients();
-        fetchDashboardStats();
+      onSuccess: (_) async {
+        await fetchPatients();
+        await fetchDashboardStats();
       },
     );
   }

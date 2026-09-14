@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dartz/dartz.dart';
 import '../../../core/common/error_handler/failure.dart';
@@ -41,7 +42,7 @@ class BaseCubit<StatesEnum> extends Cubit<BaseState<StatesEnum>> {
     required StatesEnum type,
     required Future<Either<Failure, T>> Function() fun,
     Function(Failure r)? onFailure,
-    required Function(T l) onSuccess,
+    required FutureOr<void> Function(T l) onSuccess,
   }) async {
     _retryMap[type] = () async {
       await fastFire<T>(
@@ -54,15 +55,15 @@ class BaseCubit<StatesEnum> extends Cubit<BaseState<StatesEnum>> {
 
     fire(type, StateType.loading);
     final res = await fun();
-    return res.fold(
-      (l) {
+    return await res.fold(
+      (l) async {
         l.printInfo('fastFire<$T>');
         if (onFailure != null) onFailure(l);
         fire(type, StateType.error, l.message);
         return left(l);
       },
-      (r) {
-        onSuccess(r);
+      (r) async {
+        await onSuccess(r);
         fire(type, StateType.done);
         return right(r);
       },

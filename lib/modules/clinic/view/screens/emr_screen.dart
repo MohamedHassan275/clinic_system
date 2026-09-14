@@ -112,7 +112,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
           const SizedBox(height: 14),
           Expanded(
             child: BlockBuilderWidget<ClinicCubit, ClinicApiType>(
-              types: const [ClinicApiType.getPatients],
+              types: const [ClinicApiType.getPatients, ClinicApiType.addPatient],
               loading: (_) => const Center(child: CircularProgressIndicator()),
               body: (_) => _buildPatientsList(isMobile: true),
             ),
@@ -167,7 +167,7 @@ class _EMRScreenState extends State<EMRScreen> with SingleTickerProviderStateMix
                 Expanded(
                   flex: 3,
                   child: BlockBuilderWidget<ClinicCubit, ClinicApiType>(
-                    types: const [ClinicApiType.getPatients],
+                    types: const [ClinicApiType.getPatients, ClinicApiType.addPatient],
                     loading: (_) => const Center(child: CircularProgressIndicator()),
                     body: (_) => _buildPatientsList(isMobile: false),
                   ),
