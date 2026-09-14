@@ -92,7 +92,7 @@ class ClinicRepoImpl implements ClinicRepo {
 
       // Today's waiting patients count
       final waitRes = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM appointments WHERE status IN ('waiting', 'منتظر')",
+        "SELECT COUNT(*) as count FROM appointments WHERE status = 'waiting'",
       );
       final waitingCount = Sqflite.firstIntValue(waitRes) ?? 0;
 
@@ -204,7 +204,7 @@ class ClinicRepoImpl implements ClinicRepo {
         SELECT a.*, p.name as patient_name, p.phone as patient_phone
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
-        WHERE a.status IN ('waiting', 'in_progress', 'منتظر', 'في الكشف', 'في الانتظار', 'جاري الكشف')
+        WHERE a.status IN ('waiting', 'in_progress')
         ORDER BY a.id ASC
       ''');
       return Right(res);
@@ -433,8 +433,8 @@ class ClinicRepoImpl implements ClinicRepo {
       final refRes = await db.rawQuery('SELECT COALESCE(SUM(refund_amount), 0.0) as totalRefunds FROM refunds');
 
       final apptRes = await db.rawQuery('SELECT COUNT(*) as totalAppts FROM appointments');
-      final completedApptRes = await db.rawQuery("SELECT COUNT(*) as completedAppts FROM appointments WHERE status IN ('completed', 'مكتمل')");
-      final cancelledApptRes = await db.rawQuery("SELECT COUNT(*) as cancelledAppts FROM appointments WHERE status IN ('cancelled', 'ملغي', 'ملغى')");
+      final completedApptRes = await db.rawQuery("SELECT COUNT(*) as completedAppts FROM appointments WHERE status = 'completed'");
+      final cancelledApptRes = await db.rawQuery("SELECT COUNT(*) as cancelledAppts FROM appointments WHERE status = 'cancelled'");
 
       final patRes = await db.rawQuery('SELECT COUNT(*) as totalPatients FROM patients');
       final lowStockRes = await db.rawQuery('SELECT COUNT(*) as lowStock FROM inventory WHERE quantity <= min_threshold');

@@ -80,19 +80,23 @@ void main() {
       );
 
       await db.insert('appointments', {'status': 'waiting'});
-      await db.insert('appointments', {'status': 'منتظر'});
+      await db.insert('appointments', {'status': 'in_progress'});
       await db.insert('appointments', {'status': 'completed'});
-      await db.insert('appointments', {'status': 'مكتمل'});
+      await db.insert('appointments', {'status': 'cancelled'});
 
       final waitingRes = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM appointments WHERE status IN ('waiting', 'منتظر')",
+        "SELECT COUNT(*) as count FROM appointments WHERE status = 'waiting'",
+      );
+      final waitingQueueRes = await db.rawQuery(
+        "SELECT COUNT(*) as count FROM appointments WHERE status IN ('waiting', 'in_progress')",
       );
       final completedRes = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM appointments WHERE status IN ('completed', 'مكتمل')",
+        "SELECT COUNT(*) as count FROM appointments WHERE status = 'completed'",
       );
 
-      expect(Sqflite.firstIntValue(waitingRes), equals(2));
-      expect(Sqflite.firstIntValue(completedRes), equals(2));
+      expect(Sqflite.firstIntValue(waitingRes), equals(1));
+      expect(Sqflite.firstIntValue(waitingQueueRes), equals(2));
+      expect(Sqflite.firstIntValue(completedRes), equals(1));
 
       await db.close();
     });
