@@ -8,7 +8,7 @@ import '../../../../core/enums/appointment_enums.dart';
 
 abstract class ClinicRepo {
   // Dashboard
-  Future<Either<Failure, Map<String, dynamic>>> getDashboardStats();
+  Future<Either<Failure, Map<String, dynamic>>> getDashboardStats({int clinicId = 1});
 
   // Appointments
   Future<Either<Failure, List<Map<String, dynamic>>>> getAppointments({String? date});
@@ -18,7 +18,7 @@ abstract class ClinicRepo {
   Future<Either<Failure, void>> rescheduleAppointment(int id, String newDate, String newTimeSlot);
 
   // Waiting Room
-  Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingRoomQueue();
+  Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingRoomQueue({int clinicId = 1, String? date});
 
   // EMR & Patients
   Future<Either<Failure, List<Map<String, dynamic>>>> getPatients({String? query});
@@ -78,32 +78,33 @@ abstract class ClinicRepo {
 
 class ClinicRepoImpl implements ClinicRepo {
   @override
-  Future<Either<Failure, Map<String, dynamic>>> getDashboardStats() async {
+  Future<Either<Failure, Map<String, dynamic>>> getDashboardStats({int clinicId = 1}) async {
     try {
       final db = await DatabaseHelper.instance.database;
       final todayStr = DateTime.now().toIso8601String().substring(0, 10);
 
       // Today's appointments count
       final apptRes = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM appointments WHERE appointment_date LIKE ?',
-        ['$todayStr%'],
+        'SELECT COUNT(*) as count FROM appointments WHERE clinic_id = ? AND appointment_date LIKE ?',
+        [clinicId, '$todayStr%'],
       );
       final todayAppointments = Sqflite.firstIntValue(apptRes) ?? 0;
 
       // Today's waiting patients count
       final waitRes = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM appointments WHERE status = 'waiting'",
+        "SELECT COUNT(*) as count FROM appointments WHERE clinic_id = ? AND appointment_date LIKE ? AND status IN ('waiting', 'in_progress')",
+        [clinicId, '$todayStr%'],
       );
       final waitingCount = Sqflite.firstIntValue(waitRes) ?? 0;
 
       // Total Patients
-      final patRes = await db.rawQuery('SELECT COUNT(*) as count FROM patients');
+      final patRes = await db.rawQuery('SELECT COUNT(*) as count FROM patients WHERE clinic_id = ? AND is_deleted = 0', [clinicId]);
       final totalPatients = Sqflite.firstIntValue(patRes) ?? 0;
 
       // Today's Revenue
       final revRes = await db.rawQuery(
-        'SELECT SUM(paid_amount) as total FROM invoices WHERE created_at LIKE ?',
-        ['$todayStr%'],
+        'SELECT SUM(paid_amount) as total FROM invoices WHERE clinic_id = ? AND created_at LIKE ? AND status != "refunded"',
+        [clinicId, '$todayStr%'],
       );
       final double todayRevenue = (revRes.first['total'] as num?)?.toDouble() ?? 0.0;
 
@@ -197,16 +198,19 @@ class ClinicRepoImpl implements ClinicRepo {
   }
 
   @override
-  Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingRoomQueue() async {
+  Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingRoomQueue({int clinicId = 1, String? date}) async {
     try {
       final db = await DatabaseHelper.instance.database;
+      final targetDate = date ?? DateTime.now().toIso8601String().substring(0, 10);
       final res = await db.rawQuery('''
         SELECT a.*, p.name as patient_name, p.phone as patient_phone
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
-        WHERE a.status IN ('waiting', 'in_progress')
-        ORDER BY a.id ASC
-      ''');
+        WHERE a.clinic_id = ?
+          AND a.appointment_date LIKE ?
+          AND a.status IN ('waiting', 'in_progress')
+        ORDER BY a.priority DESC, a.id ASC
+      ''', [clinicId, '$targetDate%']);
       return Right(res);
     } catch (e) {
       return Left(Failure(500, 'فشل جلب قائمة الانتظار: $e'));
@@ -418,7 +422,7 @@ class ClinicRepoImpl implements ClinicRepo {
   }
 
   @override
-  Future<Either<Failure, Map<String, dynamic>>> getReports() async {
+  Future<Either<Failure, Map<String, dynamic>>> getReports({int clinicId = 1, String? startDate, String? endDate}) async {
     try {
       final db = await DatabaseHelper.instance.database;
 
@@ -427,14 +431,14 @@ class ClinicRepoImpl implements ClinicRepo {
           COALESCE(SUM(paid_amount), 0.0) as grossRevenue,
           COALESCE(SUM(cash_amount), 0.0) as cashRevenue,
           COALESCE(SUM(card_amount), 0.0) as cardRevenue
-        FROM invoices WHERE status != 'refunded'
-      ''');
+        FROM invoices WHERE clinic_id = ? AND status != 'refunded'
+      ''', [clinicId]);
 
-      final refRes = await db.rawQuery('SELECT COALESCE(SUM(refund_amount), 0.0) as totalRefunds FROM refunds');
+      final refRes = await db.rawQuery('SELECT COALESCE(SUM(refund_amount), 0.0) as totalRefunds FROM refunds WHERE clinic_id = ?', [clinicId]);
 
-      final apptRes = await db.rawQuery('SELECT COUNT(*) as totalAppts FROM appointments');
-      final completedApptRes = await db.rawQuery("SELECT COUNT(*) as completedAppts FROM appointments WHERE status = 'completed'");
-      final cancelledApptRes = await db.rawQuery("SELECT COUNT(*) as cancelledAppts FROM appointments WHERE status = 'cancelled'");
+      final apptRes = await db.rawQuery('SELECT COUNT(*) as totalAppts FROM appointments WHERE clinic_id = ?', [clinicId]);
+      final completedApptRes = await db.rawQuery("SELECT COUNT(*) as completedAppts FROM appointments WHERE clinic_id = ? AND status = 'completed'", [clinicId]);
+      final cancelledApptRes = await db.rawQuery("SELECT COUNT(*) as cancelledAppts FROM appointments WHERE clinic_id = ? AND status = 'cancelled'", [clinicId]);
 
       final patRes = await db.rawQuery('SELECT COUNT(*) as totalPatients FROM patients');
       final lowStockRes = await db.rawQuery('SELECT COUNT(*) as lowStock FROM inventory WHERE quantity <= min_threshold');
