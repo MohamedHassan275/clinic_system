@@ -3,6 +3,7 @@ import '../../../../core/common/widgets/app_dialog.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/enums/appointment_enums.dart';
 import '../../../../core/responsive/responsive_layout.dart';
+import '../../../../core/security/session_manager.dart';
 import '../../../../core/security/shift_guard.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../shared/cubit/block_builder_widget.dart';
@@ -663,6 +664,25 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
   }
 
   void _showQuickBookAppointmentDialog(BuildContext context) {
+    if (!ShiftGuard.checkShiftOrWarn(context)) return;
+
+    final user = SessionManager.instance.currentUser;
+    final shift = SessionManager.instance.activeShift;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى تسجيل الدخول أولاً'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
+    if (shift == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى فتح وردية أولاً قبل إجراء الحجز'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
     final patients = _viewModel.clinicCubit.patients;
     if (patients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -688,11 +708,11 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
             children: [
               DropdownButtonFormField<int>(
                 initialValue: selectedPatientId,
-                decoration: const InputDecoration(labelText: 'اختر المريض'),
+                decoration: const InputDecoration(labelText: 'اختر المريض *'),
                 items: patients.map((p) {
                   return DropdownMenuItem<int>(
                     value: p['id'] as int,
-                    child: Text('${p['name']} (${p['phone']})'),
+                    child: Text('${p['name']} (${p['phone'] ?? ''})'),
                   );
                 }).toList(),
                 onChanged: (val) => setModalState(() => selectedPatientId = val),
@@ -700,7 +720,7 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: appointmentType,
-                decoration: const InputDecoration(labelText: 'نوع الموعد / الكشف'),
+                decoration: const InputDecoration(labelText: 'نوع الموعد / الكشف *'),
                 items: (_viewModel.clinicCubit.services.isNotEmpty
                         ? _viewModel.clinicCubit.services.map((s) => (s['name'] ?? '').toString()).toList()
                         : ['كشف جديد', 'إعادة / استشارة', 'متابعة نتيجه تحاليل'])
@@ -711,14 +731,26 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(dialogCtx).pop(), child: const Text('إلغاء', style: TextStyle(color: AppColors.textSecondary))),
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('إلغاء', style: TextStyle(color: AppColors.textSecondary)),
+            ),
             const SizedBox(width: 8),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary),
               onPressed: () async {
-                if (selectedPatientId == null) return;
-                await _viewModel.clinicCubit.bookAppointment({
+                if (selectedPatientId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('اختر المريض أولاً'), backgroundColor: AppColors.error),
+                  );
+                  return;
+                }
+
+                final result = await _viewModel.clinicCubit.bookAppointment({
                   'patient_id': selectedPatientId,
+                  'user_id': user['id'],
+                  'shift_id': shift['id'],
+                  'clinic_id': user['clinic_id'] ?? 1,
                   'appointment_date': DateTime.now().toIso8601String().split('T')[0],
                   'time_slot': '10:00 AM',
                   'type': AppointmentType.fromString(appointmentType).dbValue,
@@ -726,10 +758,23 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
                   'fee': 200.0,
                 });
 
-                _viewModel.clinicCubit.fetchWaitingQueue();
-                _viewModel.clinicCubit.fetchAppointments();
-
-                if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                result.fold(
+                  (failure) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('فشل الحجز: ${failure.message}'), backgroundColor: AppColors.error),
+                      );
+                    }
+                  },
+                  (id) {
+                    if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم حجز الموعد بنجاح!'), backgroundColor: AppColors.success),
+                      );
+                    }
+                  },
+                );
               },
               child: const Text('تأكيد الحجز', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),

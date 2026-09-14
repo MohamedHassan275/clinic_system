@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/common/error_handler/failure.dart';
+import '../../../../core/enums/appointment_enums.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../shared/cubit/base_cubit.dart';
 import '../repo/clinic_repo.dart';
@@ -77,13 +78,27 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
   Future<Either<Failure, List<Map<String, dynamic>>>> loadTodayAppointments({String? date}) => fetchAppointments(date: date);
 
   Future<Either<Failure, int>> addAppointment(Map<String, dynamic> appt) async {
+    final user = SessionManager.instance.currentUser;
+    final shift = SessionManager.instance.activeShift;
+
+    final sanitizedAppt = Map<String, dynamic>.from(appt);
+    sanitizedAppt['clinic_id'] ??= (user != null ? user['clinic_id'] : 1) ?? 1;
+    sanitizedAppt['user_id'] ??= user != null ? user['id'] : 1;
+    sanitizedAppt['shift_id'] ??= shift != null ? shift['id'] : 1;
+    sanitizedAppt['appointment_date'] ??= DateTime.now().toIso8601String().substring(0, 10);
+    sanitizedAppt['time_slot'] ??= '10:00 AM';
+    sanitizedAppt['type'] ??= AppointmentType.newConsultation.dbValue;
+    sanitizedAppt['status'] ??= AppointmentStatus.waiting.dbValue;
+    sanitizedAppt['fee'] ??= 0.0;
+    sanitizedAppt['priority'] ??= AppointmentPriority.normal.dbValue;
+
     return await fastFire(
       type: ClinicApiType.addAppointment,
-      fun: () => _clinicRepo.addAppointment(appt),
-      onSuccess: (_) {
-        fetchAppointments();
-        fetchWaitingQueue();
-        fetchDashboardStats();
+      fun: () => _clinicRepo.addAppointment(sanitizedAppt),
+      onSuccess: (_) async {
+        await fetchAppointments();
+        await fetchWaitingQueue();
+        await fetchDashboardStats();
       },
     );
   }

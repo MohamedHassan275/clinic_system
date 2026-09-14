@@ -880,10 +880,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 onPressed: () async {
+                  if (!ShiftGuard.checkShiftOrWarn(context)) return;
+
                   final user = SessionManager.instance.currentUser;
                   final shift = SessionManager.instance.activeShift;
 
-                  int pId = selectedPatientId ?? 1;
+                  int pId = selectedPatientId ?? (patients.isNotEmpty ? (patients.first['id'] as int) : 1);
 
                   if (patients.isEmpty) {
                     final newP = await _viewModel.clinicCubit.addPatient({
@@ -894,10 +896,11 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                     newP.fold((_) {}, (id) => pId = id);
                   }
 
-                  await _viewModel.clinicCubit.addAppointment({
+                  final res = await _viewModel.clinicCubit.addAppointment({
                     'patient_id': pId,
                     'user_id': user != null ? user['id'] : 1,
                     'shift_id': shift != null ? shift['id'] : 1,
+                    'clinic_id': user != null ? user['clinic_id'] : 1,
                     'appointment_date': formattedDate,
                     'time_slot': formattedTime,
                     'type': selectedType.dbValue,
@@ -908,15 +911,26 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                     'priority': selectedPriority.dbValue,
                   });
 
-                  if (dialogCtx.mounted) {
-                    Navigator.of(dialogCtx).pop();
-                  }
-                  _viewModel.clinicCubit.fetchAppointments(date: formattedDate);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم تسجيل وتأكيد الموعد بنجاح!'), backgroundColor: AppColors.success),
-                    );
-                  }
+                  res.fold(
+                    (failure) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('فشل حجز الموعد: ${failure.message}'), backgroundColor: AppColors.error),
+                        );
+                      }
+                    },
+                    (id) {
+                      if (dialogCtx.mounted) {
+                        Navigator.of(dialogCtx).pop();
+                      }
+                      _viewModel.clinicCubit.fetchAppointments(date: formattedDate);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تم تسجيل وتأكيد الموعد بنجاح!'), backgroundColor: AppColors.success),
+                        );
+                      }
+                    },
+                  );
                 },
                 child: const Text('تأكيد الحجز', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
