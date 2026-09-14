@@ -80,6 +80,22 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE users ADD COLUMN password_hash TEXT');
     } catch (_) {}
 
+    try {
+      await db.execute('ALTER TABLE patients ADD COLUMN secondary_phone TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE patients ADD COLUMN insurance_entity_name TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE patients ADD COLUMN policy_number TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE patients ADD COLUMN insurance_company_id INTEGER');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE patients ADD COLUMN coverage_percentage REAL DEFAULT 0');
+    } catch (_) {}
+
     // Create Indexes, Sanitize Settings Keys & Convert Arabic DB values to English
     await _createIndexes(db);
     await sanitizeExtraneousSettingsKeys(db);
@@ -215,6 +231,7 @@ class DatabaseHelper {
         clinic_id INTEGER DEFAULT 1,
         name TEXT NOT NULL,
         phone TEXT NOT NULL,
+        secondary_phone TEXT,
         national_id TEXT,
         age INTEGER,
         gender TEXT,
@@ -225,6 +242,10 @@ class DatabaseHelper {
         female_status TEXT DEFAULT 'طبيعي',
         emergency_phone TEXT,
         contract_entity TEXT DEFAULT 'نقدي (خاص)',
+        insurance_entity_name TEXT,
+        policy_number TEXT,
+        insurance_company_id INTEGER,
+        coverage_percentage REAL DEFAULT 0,
         chronic_diseases TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,
@@ -635,21 +656,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 26. Services Table
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS services (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        clinic_id INTEGER DEFAULT 1,
-        name TEXT NOT NULL,
-        category TEXT,
-        price REAL NOT NULL DEFAULT 0.0,
-        duration_minutes INTEGER DEFAULT 15,
-        is_active INTEGER DEFAULT 1,
-        created_at TEXT,
-        updated_at TEXT,
-        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
-      )
-    ''');
+
 
     // 27. Stock Movements Audit Table
     await db.execute('''
