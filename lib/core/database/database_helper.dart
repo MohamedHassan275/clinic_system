@@ -62,39 +62,18 @@ class DatabaseHelper {
     ];
 
     for (var table in oldTables) {
-      try {
-        await db.execute('ALTER TABLE $table ADD COLUMN clinic_id INTEGER DEFAULT 1');
-      } catch (_) {}
-      try {
-        await db.execute('ALTER TABLE $table ADD COLUMN updated_at TEXT');
-      } catch (_) {}
-      try {
-        await db.execute('ALTER TABLE $table ADD COLUMN is_deleted INTEGER DEFAULT 0');
-      } catch (_) {}
-      try {
-        await db.execute('ALTER TABLE $table ADD COLUMN last_synced_at TEXT');
-      } catch (_) {}
+      await _addColumnIfNotExists(db, table, 'clinic_id', 'INTEGER DEFAULT 1');
+      await _addColumnIfNotExists(db, table, 'updated_at', 'TEXT');
+      await _addColumnIfNotExists(db, table, 'is_deleted', 'INTEGER DEFAULT 0');
+      await _addColumnIfNotExists(db, table, 'last_synced_at', 'TEXT');
     }
 
-    try {
-      await db.execute('ALTER TABLE users ADD COLUMN password_hash TEXT');
-    } catch (_) {}
-
-    try {
-      await db.execute('ALTER TABLE patients ADD COLUMN secondary_phone TEXT');
-    } catch (_) {}
-    try {
-      await db.execute('ALTER TABLE patients ADD COLUMN insurance_entity_name TEXT');
-    } catch (_) {}
-    try {
-      await db.execute('ALTER TABLE patients ADD COLUMN policy_number TEXT');
-    } catch (_) {}
-    try {
-      await db.execute('ALTER TABLE patients ADD COLUMN insurance_company_id INTEGER');
-    } catch (_) {}
-    try {
-      await db.execute('ALTER TABLE patients ADD COLUMN coverage_percentage REAL DEFAULT 0');
-    } catch (_) {}
+    await _addColumnIfNotExists(db, 'users', 'password_hash', 'TEXT');
+    await _addColumnIfNotExists(db, 'patients', 'secondary_phone', 'TEXT');
+    await _addColumnIfNotExists(db, 'patients', 'insurance_entity_name', 'TEXT');
+    await _addColumnIfNotExists(db, 'patients', 'policy_number', 'TEXT');
+    await _addColumnIfNotExists(db, 'patients', 'insurance_company_id', 'INTEGER');
+    await _addColumnIfNotExists(db, 'patients', 'coverage_percentage', 'REAL DEFAULT 0');
 
     // Create Indexes, Sanitize Settings Keys & Convert Arabic DB values to English
     await _createIndexes(db);
@@ -798,6 +777,24 @@ class DatabaseHelper {
     }
 
     AppLogger.info('Database seeded successfully with initial clinic, settings, users, categories, and services.');
+  }
+
+  Future<void> _addColumnIfNotExists(Database db, String tableName, String columnName, String columnDef) async {
+    try {
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [tableName],
+      );
+      if (tables.isEmpty) return;
+
+      final info = await db.rawQuery("PRAGMA table_info($tableName)");
+      final exists = info.any((col) => col['name'] == columnName);
+      if (!exists) {
+        await db.execute('ALTER TABLE $tableName ADD COLUMN $columnName $columnDef');
+      }
+    } catch (e) {
+      AppLogger.error('Could not add column $columnName to $tableName: $e');
+    }
   }
 
   Future<void> close() async {

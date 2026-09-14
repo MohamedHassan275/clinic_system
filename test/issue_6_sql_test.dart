@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -93,6 +95,61 @@ void main() {
       expect(Sqflite.firstIntValue(completedRes), equals(2));
 
       await db.close();
+    });
+
+    test('4. DB Migration on existing populated database adds columns without data loss', () async {
+      final dbPath = path.join(Directory.systemTemp.path, 'test_mig_${DateTime.now().millisecondsSinceEpoch}.db');
+
+      // Step 1: Create v1 database with old schema and insert data
+      var db = await openDatabase(
+        dbPath,
+        version: 1,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE patients (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              phone TEXT NOT NULL
+            )
+          ''');
+          await db.insert('patients', {'name': 'مريض قديم', 'phone': '0123456789'});
+        },
+      );
+
+      final oldData = await db.query('patients');
+      expect(oldData.length, equals(1));
+      expect(oldData.first['name'], equals('مريض قديم'));
+      await db.close();
+
+      // Step 2: Open v2 and trigger onUpgrade migration
+      db = await openDatabase(
+        dbPath,
+        version: 2,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          Future<void> addCol(String table, String col, String def) async {
+            final info = await db.rawQuery('PRAGMA table_info($table)');
+            final exists = info.any((c) => c['name'] == col);
+            if (!exists) {
+              await db.execute('ALTER TABLE $table ADD COLUMN $col $def');
+            }
+          }
+
+          await addCol('patients', 'secondary_phone', 'TEXT');
+          await addCol('patients', 'coverage_percentage', 'REAL DEFAULT 0');
+        },
+      );
+
+      final migratedData = await db.query('patients');
+      expect(migratedData.length, equals(1));
+      expect(migratedData.first['name'], equals('مريض قديم'));
+      expect(migratedData.first['phone'], equals('0123456789'));
+      expect(migratedData.first.containsKey('secondary_phone'), isTrue);
+      expect(migratedData.first['coverage_percentage'], equals(0.0));
+
+      await db.close();
+      try {
+        await File(dbPath).delete();
+      } catch (_) {}
     });
   });
 }
