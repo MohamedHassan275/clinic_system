@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/enums/appointment_enums.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../shared/cubit/block_builder_widget.dart';
 import '../../data/cubit/clinic_cubit.dart';
@@ -97,7 +98,8 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
         separatorBuilder: (context, index) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final item = queue[index];
-          final bool isInside = item['status'] == 'في الكشف';
+          final apptStatus = AppointmentStatus.fromString(item['status'] as String?);
+          final bool isInside = apptStatus.isInProgress;
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: CircleAvatar(
@@ -118,7 +120,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     onPressed: () async {
-                      await _viewModel.clinicCubit.updateAppointmentStatus(item['id'] as int, 'في الكشف');
+                      await _viewModel.clinicCubit.updateAppointmentStatus(item['id'] as int, AppointmentStatus.inProgress.dbValue);
                       _viewModel.clinicCubit.fetchWaitingQueue();
                     },
                     icon: const Icon(Icons.meeting_room, size: 16, color: Colors.white),
@@ -132,7 +134,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     onPressed: () async {
-                      await _viewModel.clinicCubit.updateAppointmentStatus(item['id'] as int, 'مكتمل');
+                      await _viewModel.clinicCubit.updateAppointmentStatus(item['id'] as int, AppointmentStatus.completed.dbValue);
                       _viewModel.clinicCubit.fetchWaitingQueue();
                     },
                     icon: const Icon(Icons.check, size: 16, color: Colors.white),

@@ -110,10 +110,10 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     return await fastFire(
       type: ClinicApiType.updateAppointmentStatus,
       fun: () => _clinicRepo.updateAppointmentStatus(id, status),
-      onSuccess: (_) {
-        fetchAppointments();
-        fetchWaitingQueue();
-        fetchDashboardStats();
+      onSuccess: (_) async {
+        await fetchAppointments();
+        await fetchWaitingQueue();
+        await fetchDashboardStats();
       },
     );
   }
@@ -122,10 +122,10 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     return await fastFire(
       type: ClinicApiType.updateAppointmentStatus,
       fun: () => _clinicRepo.updateAppointment(appt),
-      onSuccess: (_) {
-        fetchAppointments();
-        fetchWaitingQueue();
-        fetchDashboardStats();
+      onSuccess: (_) async {
+        await fetchAppointments();
+        await fetchWaitingQueue();
+        await fetchDashboardStats();
       },
     );
   }
@@ -134,27 +134,29 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     return await fastFire(
       type: ClinicApiType.updateAppointmentStatus,
       fun: () => _clinicRepo.rescheduleAppointment(id, newDate, newTimeSlot),
-      onSuccess: (_) {
-        fetchAppointments();
-        fetchWaitingQueue();
-        fetchDashboardStats();
+      onSuccess: (_) async {
+        await fetchAppointments();
+        await fetchWaitingQueue();
+        await fetchDashboardStats();
       },
     );
   }
 
   /// Alias for checking in a patient to consultation room
-  Future<Either<Failure, void>> checkInPatient(int appointmentId) => updateAppointmentStatus(appointmentId, 'جاري الكشف');
+  Future<Either<Failure, void>> checkInPatient(int appointmentId) => updateAppointmentStatus(appointmentId, AppointmentStatus.inProgress.dbValue);
 
-  Future<Either<Failure, List<Map<String, dynamic>>>> fetchWaitingQueue() async {
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchWaitingQueue({int? clinicId, String? date}) async {
+    final user = SessionManager.instance.currentUser;
+    final cid = clinicId ?? (user != null ? (user['clinic_id'] as int?) : null) ?? 1;
     return await fastFire(
       type: ClinicApiType.getWaitingRoom,
-      fun: () => _clinicRepo.getWaitingRoomQueue(),
+      fun: () => _clinicRepo.getWaitingRoomQueue(clinicId: cid, date: date),
       onSuccess: (list) => waitingQueue = list,
     );
   }
 
   /// Alias for loading waiting list
-  Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingList() => fetchWaitingQueue();
+  Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingList({int? clinicId, String? date}) => fetchWaitingQueue(clinicId: clinicId, date: date);
 
   Future<Either<Failure, List<Map<String, dynamic>>>> fetchPatients({String? query}) async {
     return await fastFire(

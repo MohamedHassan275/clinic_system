@@ -208,7 +208,7 @@ class ClinicRepoImpl implements ClinicRepo {
         JOIN patients p ON a.patient_id = p.id
         WHERE a.clinic_id = ?
           AND date(a.appointment_date) = date(?)
-          AND a.status IN ('waiting', 'in_progress')
+          AND LOWER(a.status) IN ('waiting', 'in_progress')
         ORDER BY CASE LOWER(a.priority)
           WHEN 'emergency' THEN 1
           WHEN 'stat' THEN 1
