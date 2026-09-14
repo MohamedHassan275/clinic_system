@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/common/error_handler/failure.dart';
 import '../../../../core/enums/appointment_enums.dart';
+import '../../../../core/enums/payment_enums.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../shared/cubit/base_cubit.dart';
 import '../repo/clinic_repo.dart';
@@ -251,12 +252,28 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
   }
 
   Future<Either<Failure, int>> createInvoice(Map<String, dynamic> invoice) async {
+    final user = SessionManager.instance.currentUser;
+    final shift = SessionManager.instance.activeShift;
+
+    final sanitizedInvoice = Map<String, dynamic>.from(invoice);
+    sanitizedInvoice['clinic_id'] ??= (user != null ? user['clinic_id'] : 1) ?? 1;
+    sanitizedInvoice['user_id'] ??= user != null ? user['id'] : 1;
+    sanitizedInvoice['shift_id'] ??= shift != null ? shift['id'] : 1;
+    sanitizedInvoice['created_at'] ??= DateTime.now().toIso8601String().substring(0, 16).replaceAll('T', ' ');
+    sanitizedInvoice['payment_method'] ??= PaymentMethod.cash.dbValue;
+    sanitizedInvoice['status'] ??= 'paid';
+    sanitizedInvoice['total_amount'] ??= 0.0;
+    sanitizedInvoice['discount'] ??= 0.0;
+    sanitizedInvoice['paid_amount'] ??= 0.0;
+    sanitizedInvoice['cash_amount'] ??= 0.0;
+    sanitizedInvoice['card_amount'] ??= 0.0;
+
     return await fastFire(
       type: ClinicApiType.createInvoice,
-      fun: () => _clinicRepo.createInvoice(invoice),
-      onSuccess: (_) {
-        fetchInvoices();
-        fetchDashboardStats();
+      fun: () => _clinicRepo.createInvoice(sanitizedInvoice),
+      onSuccess: (_) async {
+        await fetchInvoices();
+        await fetchDashboardStats();
       },
     );
   }
@@ -282,9 +299,9 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
         shiftId: shiftId,
         patientId: patientId,
       ),
-      onSuccess: (_) {
-        fetchInvoices();
-        fetchDashboardStats();
+      onSuccess: (_) async {
+        await fetchInvoices();
+        await fetchDashboardStats();
       },
     );
   }

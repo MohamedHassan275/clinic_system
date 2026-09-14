@@ -647,6 +647,18 @@ class _BillingScreenState extends State<BillingScreen> {
   }
 
   void _showCreateInvoiceDialog(BuildContext context) {
+    if (!ShiftGuard.checkShiftOrWarn(context)) return;
+
+    final user = SessionManager.instance.currentUser;
+    final shift = SessionManager.instance.activeShift;
+
+    if (user == null || shift == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب تسجيل الدخول وفتح وردية أولاً لإصدار فاتورة'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
     final patients = _viewModel.clinicCubit.patients;
     int? selectedPatientId = patients.isNotEmpty ? patients.first['id'] as int : null;
     final totalCtrl = TextEditingController();
@@ -845,11 +857,15 @@ class _BillingScreenState extends State<BillingScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () async {
-                final user = SessionManager.instance.currentUser;
-                final shift = SessionManager.instance.activeShift;
-                final nowStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+                final totalAmt = double.tryParse(totalCtrl.text) ?? 0.0;
+                final totalPaid = double.tryParse(paidCtrl.text) ?? 0.0;
+                if (totalPaid < 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('يرجى إدخال مبلغ مدفوع صحيح'), backgroundColor: AppColors.error),
+                  );
+                  return;
+                }
 
-                final totalPaid = double.tryParse(paidCtrl.text) ?? 300.0;
                 double cashAmt = 0.0;
                 double cardAmt = 0.0;
 
@@ -859,16 +875,25 @@ class _BillingScreenState extends State<BillingScreen> {
                 } else if (selectedMethod == PaymentMethod.split) {
                   cashAmt = double.tryParse(cashPortionCtrl.text) ?? (totalPaid / 2);
                   cardAmt = double.tryParse(cardPortionCtrl.text) ?? (totalPaid / 2);
+                  if ((cashAmt + cardAmt - totalPaid).abs() > 0.01) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('مجموع الجزء النقدي والجزء الكارت يجب أن يساوي المبلغ المدفوع الكلي'), backgroundColor: AppColors.error),
+                    );
+                    return;
+                  }
                 } else {
                   cashAmt = 0.0;
                   cardAmt = totalPaid;
                 }
 
-                await _viewModel.clinicCubit.createInvoice({
+                final nowStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+
+                final res = await _viewModel.clinicCubit.createInvoice({
                   'patient_id': selectedPatientId ?? 1,
-                  'user_id': user != null ? user['id'] : 1,
-                  'shift_id': shift != null ? shift['id'] : 1,
-                  'total_amount': double.tryParse(totalCtrl.text) ?? 300.0,
+                  'user_id': user['id'],
+                  'shift_id': shift['id'],
+                  'clinic_id': user['clinic_id'] ?? 1,
+                  'total_amount': totalAmt > 0 ? totalAmt : totalPaid,
                   'discount': double.tryParse(discountCtrl.text) ?? 0.0,
                   'paid_amount': totalPaid,
                   'cash_amount': cashAmt,
@@ -877,15 +902,23 @@ class _BillingScreenState extends State<BillingScreen> {
                   'created_at': nowStr,
                 });
 
-                if (dialogCtx.mounted) {
-                  Navigator.of(dialogCtx).pop();
-                }
-                _viewModel.clinicCubit.fetchInvoices();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم إصدار وتوثيق الفاتورة بنجاح!'), backgroundColor: AppColors.success),
-                  );
-                }
+                res.fold(
+                  (failure) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('فشل إصدار الفاتورة: ${failure.message}'), backgroundColor: AppColors.error),
+                      );
+                    }
+                  },
+                  (id) {
+                    if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم إصدار وتوثيق الفاتورة بنجاح!'), backgroundColor: AppColors.success),
+                      );
+                    }
+                  },
+                );
               },
               child: const Text('تأكيد وإصدار', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
