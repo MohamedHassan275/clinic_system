@@ -8,6 +8,7 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
   final Widget Function(S currentApi)? loading;
   final Widget Function(S currentApi)? error;
   final Widget Function(S currentApi)? fetchMore;
+  final VoidCallback? onRetry;
 
   const BlockBuilderWidget({
     super.key,
@@ -16,6 +17,7 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
     this.error,
     required this.types,
     this.fetchMore,
+    this.onRetry,
   });
 
   @override
@@ -41,23 +43,41 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
                 );
         }
         if (isError) {
+          final errorMsg = cubit.errorMessageOf(activeType) ?? 'حدث خطأ في تحميل البيانات';
           return error != null
               ? error!(activeType)
               : Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 40),
-                      const SizedBox(height: 8),
-                      const Text('حدث خطأ في تحميل البيانات'),
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: () {
-                          // Allow retry
-                        },
-                        child: const Text('إعادة المحاولة'),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 44),
+                        const SizedBox(height: 10),
+                        Text(
+                          errorMsg,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 14),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          onPressed: () async {
+                            if (onRetry != null) {
+                              onRetry!();
+                            } else {
+                              for (var t in types) {
+                                if (cubit.stateOf(t).isError()) {
+                                  await cubit.retry(t);
+                                }
+                              }
+                            }
+                          },
+                          label: const Text('إعادة المحاولة'),
+                        ),
+                      ],
+                    ),
                   ),
                 );
         }
