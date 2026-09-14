@@ -209,7 +209,12 @@ class ClinicRepoImpl implements ClinicRepo {
         WHERE a.clinic_id = ?
           AND date(a.appointment_date) = date(?)
           AND a.status IN ('waiting', 'in_progress')
-        ORDER BY a.priority DESC, a.id ASC
+        ORDER BY CASE LOWER(a.priority)
+          WHEN 'emergency' THEN 1
+          WHEN 'stat' THEN 1
+          WHEN 'urgent' THEN 2
+          ELSE 3
+        END ASC, a.id ASC
       ''', [clinicId, targetDate]);
       return Right(res);
     } catch (e) {
