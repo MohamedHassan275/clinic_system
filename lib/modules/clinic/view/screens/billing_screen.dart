@@ -649,11 +649,11 @@ class _BillingScreenState extends State<BillingScreen> {
   void _showCreateInvoiceDialog(BuildContext context) {
     final patients = _viewModel.clinicCubit.patients;
     int? selectedPatientId = patients.isNotEmpty ? patients.first['id'] as int : null;
-    final totalCtrl = TextEditingController(text: '300');
-    final discountCtrl = TextEditingController(text: '0');
-    final paidCtrl = TextEditingController(text: '300');
-    final cashPortionCtrl = TextEditingController(text: '150');
-    final cardPortionCtrl = TextEditingController(text: '150');
+    final totalCtrl = TextEditingController();
+    final discountCtrl = TextEditingController();
+    final paidCtrl = TextEditingController();
+    final cashPortionCtrl = TextEditingController();
+    final cardPortionCtrl = TextEditingController();
     PaymentMethod selectedMethod = PaymentMethod.cash;
 
     showDialog(
