@@ -97,10 +97,12 @@ class _PatientRegistrationScreenState extends State<PatientRegistrationScreen> {
     _femaleStatus = p?['female_status'] ?? 'طبيعي';
     _contractType = PaymentMethod.fromString(p?['contract_entity'] ?? p?['contract_type']);
 
-    if (p?['chronic_diseases'] != null && (p!['chronic_diseases'] as String).isNotEmpty) {
-      final parts = (p['chronic_diseases'] as String).split('، ');
-      _selectedChronic.addAll(parts.where((s) => s.isNotEmpty && s != 'لا توجد'));
+    if (p?['chronic_diseases'] != null && p!['chronic_diseases'].toString().isNotEmpty) {
+      final list = p['chronic_diseases'].toString().split(', ');
+      _selectedChronic.addAll(list.where((item) => _chronicOptions.contains(item)));
     }
+
+    sl<ClinicCubit>().fetchInsuranceCompanies();
   }
 
   @override

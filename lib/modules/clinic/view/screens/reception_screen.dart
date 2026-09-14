@@ -29,6 +29,7 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
     _viewModel.clinicCubit.fetchWaitingQueue();
     _viewModel.clinicCubit.fetchAppointments();
     _viewModel.clinicCubit.fetchPatients();
+    _viewModel.clinicCubit.fetchServices();
   }
 
   @override
@@ -700,11 +701,11 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
               DropdownButtonFormField<String>(
                 initialValue: appointmentType,
                 decoration: const InputDecoration(labelText: 'نوع الموعد / الكشف'),
-                items: const [
-                  DropdownMenuItem(value: 'كشف جديد', child: Text('كشف جديد')),
-                  DropdownMenuItem(value: 'إعادة / استشارة', child: Text('إعادة / استشارة')),
-                  DropdownMenuItem(value: 'متابعة نتيجه تحاليل', child: Text('متابعة نتائج')),
-                ],
+                items: (_viewModel.clinicCubit.services.isNotEmpty
+                        ? _viewModel.clinicCubit.services.map((s) => (s['name'] ?? '').toString()).toList()
+                        : ['كشف جديد', 'إعادة / استشارة', 'متابعة نتيجه تحاليل'])
+                    .map((typeStr) => DropdownMenuItem(value: typeStr, child: Text(typeStr)))
+                    .toList(),
                 onChanged: (val) => setModalState(() => appointmentType = val!),
               ),
             ],

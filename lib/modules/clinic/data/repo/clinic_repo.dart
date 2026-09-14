@@ -66,6 +66,14 @@ abstract class ClinicRepo {
   Future<Either<Failure, void>> deleteUser(int userId);
   Future<Either<Failure, Map<String, dynamic>>> getClinicInfo();
   Future<Either<Failure, void>> updateClinicInfo(Map<String, dynamic> clinicInfo);
+
+  // Dynamic Categories, Services & Insurance
+  Future<Either<Failure, List<Map<String, dynamic>>>> getCategories({String? type});
+  Future<Either<Failure, int>> addCategory(Map<String, dynamic> category);
+  Future<Either<Failure, List<Map<String, dynamic>>>> getServices();
+  Future<Either<Failure, int>> addService(Map<String, dynamic> service);
+  Future<Either<Failure, List<Map<String, dynamic>>>> getInsuranceCompanies();
+  Future<Either<Failure, int>> addInsuranceCompany(Map<String, dynamic> company);
 }
 
 class ClinicRepoImpl implements ClinicRepo {
@@ -539,6 +547,74 @@ class ClinicRepoImpl implements ClinicRepo {
       return const Right(null);
     } catch (e) {
       return Left(Failure(500, 'فشل تحديث بيانات العيادة: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> getCategories({String? type}) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final res = type != null
+          ? await db.query('categories', where: 'type = ? AND is_active = 1', whereArgs: [type])
+          : await db.query('categories', where: 'is_active = 1');
+      return Right(res);
+    } catch (e) {
+      return Left(Failure(500, 'فشل جلب التصنيفات: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, int>> addCategory(Map<String, dynamic> category) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final id = await db.insert('categories', category);
+      return Right(id);
+    } catch (e) {
+      return Left(Failure(500, 'فشل إضافة التصنيف: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> getServices() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final res = await db.query('services', where: 'is_active = 1');
+      return Right(res);
+    } catch (e) {
+      return Left(Failure(500, 'فشل جلب خدمات العيادة: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, int>> addService(Map<String, dynamic> service) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final id = await db.insert('services', service);
+      return Right(id);
+    } catch (e) {
+      return Left(Failure(500, 'فشل إضافة الخدمة: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> getInsuranceCompanies() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final res = await db.query('insurance_companies', where: 'is_active = 1');
+      return Right(res);
+    } catch (e) {
+      return Left(Failure(500, 'فشل جلب شركات التأمين: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, int>> addInsuranceCompany(Map<String, dynamic> company) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final id = await db.insert('insurance_companies', company);
+      return Right(id);
+    } catch (e) {
+      return Left(Failure(500, 'فشل إضافة شركة التأمين: $e'));
     }
   }
 }

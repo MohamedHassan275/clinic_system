@@ -26,13 +26,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
   bool _showOnlyLowStock = false;
   bool _showOnlyExpiring = false;
 
-  static const List<String> _categories = [
-    'الكل',
-    'كواشف ومحاليل كيمياء',
-    'أدوات سحب وأنابيب',
-    'مستهلكات وقاية وتعقيم',
-    'أدوية ومستلزمات عامة',
-  ];
+  List<String> get _categories {
+    final dbCats = _viewModel.clinicCubit.categories.map((c) => c['name'] as String).toList();
+    if (dbCats.isEmpty) {
+      return [
+        'الكل',
+        'كواشف ومحاليل كيمياء',
+        'أدوات سحب وأنابيب',
+        'مستهلكات وقاية وتعقيم',
+        'أدوية ومستلزمات عامة',
+      ];
+    }
+    return ['الكل', ...dbCats];
+  }
 
   @override
   void initState() {
@@ -41,6 +47,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       if (mounted) setState(() {});
     });
     _viewModel.clinicCubit.fetchInventory();
+    _viewModel.clinicCubit.fetchCategories(type: 'inventory');
   }
 
   @override

@@ -48,13 +48,11 @@ class PatientAttachmentsTabWidget extends StatelessWidget {
                 DropdownButtonFormField<String>(
                   initialValue: fileType,
                   decoration: const InputDecoration(labelText: 'نوع المرفق *'),
-                  items: const [
-                    DropdownMenuItem(value: 'أشعة سينية / سيتي', child: Text('أشعة سينية / X-Ray / CT')),
-                    DropdownMenuItem(value: 'تقرير معملي خارجي', child: Text('تقرير معملي خارجي')),
-                    DropdownMenuItem(value: 'روشتة ورقية مصورة', child: Text('روشتة ورقية مصورة')),
-                    DropdownMenuItem(value: 'تقرير طب شرعي / عمليات', child: Text('تقرير طب شرعي / عمليات')),
-                    DropdownMenuItem(value: 'مستند آخر', child: Text('مستند آخر')),
-                  ],
+                  items: (cubit.categories.where((c) => c['type'] == 'attachment').isNotEmpty
+                          ? cubit.categories.where((c) => c['type'] == 'attachment').map((c) => c['name'] as String).toList()
+                          : ['أشعة سينية / سيتي', 'تقرير معملي خارجي', 'روشتة ورقية مصورة', 'تقرير طب شرعي / عمليات', 'مستند آخر'])
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
                   onChanged: (val) => setModalState(() => fileType = val!),
                 ),
                 const SizedBox(height: 12),

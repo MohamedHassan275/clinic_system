@@ -27,6 +27,12 @@ enum ClinicApiType {
   updatePermissions,
   getClinicInfo,
   updateClinicInfo,
+  getCategories,
+  addCategory,
+  getServices,
+  addService,
+  getInsuranceCompanies,
+  addInsuranceCompany,
 }
 
 class ClinicCubit extends BaseCubit<ClinicApiType> {
@@ -44,6 +50,9 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
   Map<String, dynamic> reportsData = {};
   List<Map<String, dynamic>> usersList = [];
   Map<String, dynamic>? clinicInfo;
+  List<Map<String, dynamic>> categories = [];
+  List<Map<String, dynamic>> services = [];
+  List<Map<String, dynamic>> insuranceCompanies = [];
 
   Future<Either<Failure, Map<String, dynamic>>> fetchDashboardStats() async {
     return await fastFire(
@@ -377,6 +386,54 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
       type: ClinicApiType.updateClinicInfo,
       fun: () => _clinicRepo.updateClinicInfo(info),
       onSuccess: (_) => fetchClinicInfo(),
+    );
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchCategories({String? type}) async {
+    return await fastFire(
+      type: ClinicApiType.getCategories,
+      fun: () => _clinicRepo.getCategories(type: type),
+      onSuccess: (list) => categories = list,
+    );
+  }
+
+  Future<Either<Failure, int>> addCategory(Map<String, dynamic> category) async {
+    return await fastFire(
+      type: ClinicApiType.addCategory,
+      fun: () => _clinicRepo.addCategory(category),
+      onSuccess: (_) => fetchCategories(type: category['type']),
+    );
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchServices() async {
+    return await fastFire(
+      type: ClinicApiType.getServices,
+      fun: () => _clinicRepo.getServices(),
+      onSuccess: (list) => services = list,
+    );
+  }
+
+  Future<Either<Failure, int>> addService(Map<String, dynamic> service) async {
+    return await fastFire(
+      type: ClinicApiType.addService,
+      fun: () => _clinicRepo.addService(service),
+      onSuccess: (_) => fetchServices(),
+    );
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchInsuranceCompanies() async {
+    return await fastFire(
+      type: ClinicApiType.getInsuranceCompanies,
+      fun: () => _clinicRepo.getInsuranceCompanies(),
+      onSuccess: (list) => insuranceCompanies = list,
+    );
+  }
+
+  Future<Either<Failure, int>> addInsuranceCompany(Map<String, dynamic> company) async {
+    return await fastFire(
+      type: ClinicApiType.addInsuranceCompany,
+      fun: () => _clinicRepo.addInsuranceCompany(company),
+      onSuccess: (_) => fetchInsuranceCompanies(),
     );
   }
 }

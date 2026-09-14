@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../shared/cubit/block_builder_widget.dart';
@@ -30,6 +33,43 @@ class _ReportsScreenState extends State<ReportsScreen> {
     super.dispose();
   }
 
+  Future<void> _exportPdfReport() async {
+    final r = _viewModel.clinicCubit.reportsData;
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Padding(
+            padding: const pw.EdgeInsets.all(24),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Header(level: 0, child: pw.Text('Financial & Operational Clinic Report', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold))),
+                pw.SizedBox(height: 16),
+                pw.Text('Date Generated: ${DateTime.now().toIso8601String().substring(0, 10)}'),
+                pw.SizedBox(height: 20),
+                pw.Text('Total Cumulative Revenue: ${r['totalRevenue'] ?? 0.0} EGP', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                pw.Text('Total Registered Appointments: ${r['totalAppointments'] ?? 0}'),
+                pw.SizedBox(height: 8),
+                pw.Text('Total Patients Registered: ${r['totalPatients'] ?? 0}'),
+                pw.SizedBox(height: 8),
+                pw.Text('Low Stock Critical Items: ${r['lowStockItems'] ?? 0}'),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'clinic_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -51,11 +91,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ],
                 ),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم تصدير التقرير المالي بصيغة PDF بنجاح.')),
-                    );
-                  },
+                  onPressed: _exportPdfReport,
                   icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
                   label: const Text('تصدير PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),

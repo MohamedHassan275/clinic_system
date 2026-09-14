@@ -622,6 +622,35 @@ class DatabaseHelper {
         FOREIGN KEY (doctor_id) REFERENCES users(id) ON DELETE CASCADE
       )
     ''');
+
+    // 25. Categories Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 26. Services Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS services (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        name TEXT NOT NULL,
+        category TEXT,
+        price REAL NOT NULL DEFAULT 0.0,
+        duration_minutes INTEGER DEFAULT 15,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -677,6 +706,7 @@ class DatabaseHelper {
         'audit_log',
         'insurance_companies',
         'patient_insurance',
+        'categories',
         'sync_queue',
         'vitals',
         'lab_orders',
@@ -780,7 +810,55 @@ class DatabaseHelper {
       });
     }
 
-    AppLogger.info('Database seeded successfully with clinic "عيادتي", default settings, and initial users mo_hassan & dr_hassan.');
+    // 4. Seed Default Categories if empty
+    final catCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM categories');
+    final catCount = catCountRes.isNotEmpty ? (catCountRes.first['count'] as int? ?? 0) : 0;
+    if (catCount == 0) {
+      final initialCategories = [
+        {'name': 'كواشف ومحاليل كيمياء', 'type': 'inventory'},
+        {'name': 'أدوات سحب وأنابيب', 'type': 'inventory'},
+        {'name': 'مستهلكات وقاية وتعقيم', 'type': 'inventory'},
+        {'name': 'أدوية ومستلزمات عامة', 'type': 'inventory'},
+        {'name': 'كشف عيادة', 'type': 'service'},
+        {'name': 'استشارة ومتابعة', 'type': 'service'},
+        {'name': 'أشعة سينية / CT', 'type': 'attachment'},
+        {'name': 'تقرير معملي خارجي', 'type': 'attachment'},
+        {'name': 'روشتة مصورة', 'type': 'attachment'},
+      ];
+      for (var cat in initialCategories) {
+        await db.insert('categories', {
+          'clinic_id': 1,
+          'name': cat['name'],
+          'type': cat['type'],
+          'is_active': 1,
+          'created_at': nowStr,
+        });
+      }
+    }
+
+    // 5. Seed Default Services if empty
+    final serviceCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM services');
+    final serviceCount = serviceCountRes.isNotEmpty ? (serviceCountRes.first['count'] as int? ?? 0) : 0;
+    if (serviceCount == 0) {
+      final initialServices = [
+        {'name': 'كشف جديد', 'category': 'كشف عيادة', 'price': 200.0, 'duration_minutes': 20},
+        {'name': 'إعادة / استشارة', 'category': 'استشارة ومتابعة', 'price': 50.0, 'duration_minutes': 10},
+        {'name': 'متابعة نتائج تحاليل', 'category': 'استشارة ومتابعة', 'price': 0.0, 'duration_minutes': 10},
+      ];
+      for (var srv in initialServices) {
+        await db.insert('services', {
+          'clinic_id': 1,
+          'name': srv['name'],
+          'category': srv['category'],
+          'price': srv['price'],
+          'duration_minutes': srv['duration_minutes'],
+          'is_active': 1,
+          'created_at': nowStr,
+        });
+      }
+    }
+
+    AppLogger.info('Database seeded successfully with initial clinic, settings, users, categories, and services.');
   }
 
   Future<void> close() async {

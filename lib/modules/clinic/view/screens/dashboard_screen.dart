@@ -76,17 +76,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   return const Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(flex: 3, child: _QuickInfoCard(title: 'مؤشر الحجوزات الأسبوعي', icon: Icons.bar_chart_rounded)),
+                      Expanded(
+                        flex: 3,
+                        child: _QuickInfoCard(
+                          title: 'مؤشر الحجوزات الأسبوعي',
+                          icon: Icons.bar_chart_rounded,
+                          contentText: 'يتم احتساب إحصائيات المواعيد الأسبوعية تلقائياً بناءً على سجلات العيادة المفعلة في SQLite',
+                        ),
+                      ),
                       SizedBox(width: 20),
-                      Expanded(flex: 2, child: _QuickInfoCard(title: 'تنبيهات النظام والمواعيد', icon: Icons.notifications_active_rounded)),
+                      Expanded(
+                        flex: 2,
+                        child: _QuickInfoCard(
+                          title: 'تنبيهات النظام والمواعيد',
+                          icon: Icons.notifications_active_rounded,
+                          contentText: 'حالة الوردية والنظام متزنة ولا توجد تنبيهات عاجلة متأخرة حالياً',
+                        ),
+                      ),
                     ],
                   );
                 } else {
                   return const Column(
                     children: [
-                      _QuickInfoCard(title: 'مؤشر الحجوزات الأسبوعي', icon: Icons.bar_chart_rounded),
+                      _QuickInfoCard(
+                        title: 'مؤشر الحجوزات الأسبوعي',
+                        icon: Icons.bar_chart_rounded,
+                        contentText: 'يتم احتساب إحصائيات المواعيد الأسبوعية تلقائياً بناءً على سجلات العيادة المفعلة في SQLite',
+                      ),
                       SizedBox(height: 16),
-                      _QuickInfoCard(title: 'تنبيهات النظام والمواعيد', icon: Icons.notifications_active_rounded),
+                      _QuickInfoCard(
+                        title: 'تنبيهات النظام والمواعيد',
+                        icon: Icons.notifications_active_rounded,
+                        contentText: 'حالة الوردية والنظام متزنة ولا توجد تنبيهات عاجلة متأخرة حالياً',
+                      ),
                     ],
                   );
                 }
@@ -194,8 +216,13 @@ class _StatCard extends StatelessWidget {
 class _QuickInfoCard extends StatelessWidget {
   final String title;
   final IconData icon;
+  final String contentText;
 
-  const _QuickInfoCard({required this.title, required this.icon});
+  const _QuickInfoCard({
+    required this.title,
+    required this.icon,
+    required this.contentText,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -217,14 +244,16 @@ class _QuickInfoCard extends StatelessWidget {
             const SizedBox(height: 16),
             Container(
               height: 120,
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.background,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Center(
+              child: Center(
                 child: Text(
-                  'بيانات العيادة محدّثة وقيد التشغيل المستمر',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  contentText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.5),
                 ),
               ),
             ),
