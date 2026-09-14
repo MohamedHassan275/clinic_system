@@ -421,14 +421,38 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, Map<String, dynamic>>> getReports() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final revRes = await db.rawQuery('SELECT SUM(paid_amount) as totalRevenue FROM invoices');
+
+      final revRes = await db.rawQuery('''
+        SELECT 
+          COALESCE(SUM(paid_amount), 0.0) as grossRevenue,
+          COALESCE(SUM(cash_amount), 0.0) as cashRevenue,
+          COALESCE(SUM(card_amount), 0.0) as cardRevenue
+        FROM invoices WHERE status != 'refunded'
+      ''');
+
+      final refRes = await db.rawQuery('SELECT COALESCE(SUM(refund_amount), 0.0) as totalRefunds FROM refunds');
+
       final apptRes = await db.rawQuery('SELECT COUNT(*) as totalAppts FROM appointments');
+      final completedApptRes = await db.rawQuery("SELECT COUNT(*) as completedAppts FROM appointments WHERE status = 'مكتمل'");
+      final cancelledApptRes = await db.rawQuery("SELECT COUNT(*) as cancelledAppts FROM appointments WHERE status = 'ملغي'");
+
       final patRes = await db.rawQuery('SELECT COUNT(*) as totalPatients FROM patients');
       final lowStockRes = await db.rawQuery('SELECT COUNT(*) as lowStock FROM inventory WHERE quantity <= min_threshold');
 
+      final grossRev = (revRes.first['grossRevenue'] as num?)?.toDouble() ?? 0.0;
+      final totalRefunds = (refRes.first['totalRefunds'] as num?)?.toDouble() ?? 0.0;
+      final netRev = grossRev - totalRefunds;
+
       return Right({
-        'totalRevenue': (revRes.first['totalRevenue'] as num?)?.toDouble() ?? 0.0,
+        'grossRevenue': grossRev,
+        'totalRefunds': totalRefunds,
+        'totalRevenue': netRev,
+        'netRevenue': netRev,
+        'cashRevenue': (revRes.first['cashRevenue'] as num?)?.toDouble() ?? 0.0,
+        'cardRevenue': (revRes.first['cardRevenue'] as num?)?.toDouble() ?? 0.0,
         'totalAppointments': Sqflite.firstIntValue(apptRes) ?? 0,
+        'completedAppointments': Sqflite.firstIntValue(completedApptRes) ?? 0,
+        'cancelledAppointments': Sqflite.firstIntValue(cancelledApptRes) ?? 0,
         'totalPatients': Sqflite.firstIntValue(patRes) ?? 0,
         'lowStockItems': Sqflite.firstIntValue(lowStockRes) ?? 0,
       });
