@@ -85,15 +85,15 @@ class ClinicRepoImpl implements ClinicRepo {
 
       // Today's appointments count
       final apptRes = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM appointments WHERE clinic_id = ? AND appointment_date LIKE ?',
-        [clinicId, '$todayStr%'],
+        'SELECT COUNT(*) as count FROM appointments WHERE clinic_id = ? AND date(appointment_date) = date(?)',
+        [clinicId, todayStr],
       );
       final todayAppointments = Sqflite.firstIntValue(apptRes) ?? 0;
 
       // Today's waiting patients count
       final waitRes = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM appointments WHERE clinic_id = ? AND appointment_date LIKE ? AND status IN ('waiting', 'in_progress')",
-        [clinicId, '$todayStr%'],
+        "SELECT COUNT(*) as count FROM appointments WHERE clinic_id = ? AND date(appointment_date) = date(?) AND status IN ('waiting', 'in_progress')",
+        [clinicId, todayStr],
       );
       final waitingCount = Sqflite.firstIntValue(waitRes) ?? 0;
 
@@ -103,8 +103,8 @@ class ClinicRepoImpl implements ClinicRepo {
 
       // Today's Revenue
       final revRes = await db.rawQuery(
-        'SELECT SUM(paid_amount) as total FROM invoices WHERE clinic_id = ? AND created_at LIKE ? AND status != "refunded"',
-        [clinicId, '$todayStr%'],
+        'SELECT SUM(paid_amount) as total FROM invoices WHERE clinic_id = ? AND date(created_at) = date(?) AND status != "refunded"',
+        [clinicId, todayStr],
       );
       final double todayRevenue = (revRes.first['total'] as num?)?.toDouble() ?? 0.0;
 
@@ -131,8 +131,8 @@ class ClinicRepoImpl implements ClinicRepo {
       ''';
       List<dynamic> args = [];
       if (date != null && date.isNotEmpty) {
-        query += ' WHERE a.appointment_date LIKE ?';
-        args.add('$date%');
+        query += ' WHERE date(a.appointment_date) = date(?)';
+        args.add(date);
       }
       query += ' ORDER BY a.id DESC';
 
@@ -207,10 +207,10 @@ class ClinicRepoImpl implements ClinicRepo {
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
         WHERE a.clinic_id = ?
-          AND a.appointment_date LIKE ?
+          AND date(a.appointment_date) = date(?)
           AND a.status IN ('waiting', 'in_progress')
         ORDER BY a.priority DESC, a.id ASC
-      ''', [clinicId, '$targetDate%']);
+      ''', [clinicId, targetDate]);
       return Right(res);
     } catch (e) {
       return Left(Failure(500, 'فشل جلب قائمة الانتظار: $e'));
