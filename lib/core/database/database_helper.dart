@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -651,6 +650,23 @@ class DatabaseHelper {
         FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
       )
     ''');
+
+    // 27. Stock Movements Audit Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        item_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        reason TEXT,
+        reference_no TEXT,
+        user_id INTEGER,
+        created_at TEXT,
+        FOREIGN KEY (item_id) REFERENCES inventory(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    ''');
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -707,6 +723,7 @@ class DatabaseHelper {
         'insurance_companies',
         'patient_insurance',
         'categories',
+        'stock_movements',
         'sync_queue',
         'vitals',
         'lab_orders',
@@ -722,93 +739,8 @@ class DatabaseHelper {
   }
 
   Future<void> _seedInitialData(Database db) async {
-    AppLogger.info('Seeding initial default clinic, settings, and users...');
+    AppLogger.info('Initializing SQLite schema. Static demo users and default clinics are removed.');
     final nowStr = DateTime.now().toIso8601String();
-
-    // 1. Seed Default Clinic "عيادتي" (id = 1)
-    final clinicCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM clinics WHERE id = 1');
-    final clinicCount = clinicCountRes.isNotEmpty ? (clinicCountRes.first['count'] as int? ?? 0) : 0;
-    if (clinicCount == 0) {
-      await db.insert('clinics', {
-        'id': 1,
-        'name': 'عيادتي',
-        'address': 'الفرع الرئيسي',
-        'phone': '01000000000',
-        'currency': 'EGP',
-        'subscription_plan': 'starter',
-        'is_active': 1,
-        'created_at': nowStr,
-        'updated_at': nowStr,
-      });
-    }
-
-    // 2. Seed Default Settings
-    final settingsKeys = [
-      {'key': 'currency', 'value': 'EGP'},
-      {'key': 'language', 'value': 'ar'},
-      {'key': 'working_hours', 'value': '09:00 - 21:00'},
-    ];
-    for (var setting in settingsKeys) {
-      await db.rawInsert('''
-        INSERT OR IGNORE INTO settings (clinic_id, key, value, updated_at)
-        VALUES (1, ?, ?, ?)
-      ''', [setting['key'], setting['value'], nowStr]);
-    }
-
-    // 3. Seed Default System Users (mo_hassan and dr_hassan)
-    final allPermissions = jsonEncode([
-      'dashboard',
-      'appointments',
-      'waiting_room',
-      'emr',
-      'consultation',
-      'billing',
-      'inventory',
-      'reports',
-      'settings',
-    ]);
-
-    final doctorPermissions = jsonEncode([
-      'dashboard',
-      'appointments',
-      'waiting_room',
-      'emr',
-      'consultation',
-    ]);
-
-    // Super Admin User
-    final adminCountRes = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE username = 'mo_hassan'");
-    final adminCount = adminCountRes.isNotEmpty ? (adminCountRes.first['count'] as int? ?? 0) : 0;
-    if (adminCount == 0) {
-      await db.insert('users', {
-        'clinic_id': 1,
-        'username': 'mo_hassan',
-        'password': '123456',
-        'full_name': 'mohamed hassan',
-        'role': 'admin',
-        'branch': 'جميع الفروع (سوبر أدمن)',
-        'permissions_json': allPermissions,
-        'is_active': 1,
-        'created_at': nowStr,
-      });
-    }
-
-    // Doctor User
-    final doctorCountRes = await db.rawQuery("SELECT COUNT(*) as count FROM users WHERE username = 'dr_hassan'");
-    final doctorCount = doctorCountRes.isNotEmpty ? (doctorCountRes.first['count'] as int? ?? 0) : 0;
-    if (doctorCount == 0) {
-      await db.insert('users', {
-        'clinic_id': 1,
-        'username': 'dr_hassan',
-        'password': '123456',
-        'full_name': 'د. محمد حسن (طبيب معالج)',
-        'role': 'doctor',
-        'branch': 'فرع السلام (الرئيسي)',
-        'permissions_json': doctorPermissions,
-        'is_active': 1,
-        'created_at': nowStr,
-      });
-    }
 
     // 4. Seed Default Categories if empty
     final catCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM categories');
