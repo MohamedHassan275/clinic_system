@@ -48,10 +48,15 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
     super.dispose();
   }
 
+  void _switchPortal(UserRole mode) {
+    _viewModel.toggleAdminRoleView(mode);
+    if (mounted) setState(() {});
+  }
+
   Widget _getScreenWidget(String key) {
     final role = _viewModel.activeRoleMode;
     return KeyedSubtree(
-      key: ValueKey(key),
+      key: ValueKey('${role.dbValue}_$key'),
       child: () {
         switch (key) {
           case 'dashboard':
@@ -149,7 +154,10 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                 endDrawer: Drawer(
                   child: _buildSidebarContent(allowedItems, validIndex, isDesktop: false),
                 ),
-                body: _getScreenWidget(currentKey),
+                body: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: _getScreenWidget(currentKey),
+                ),
               ),
 
               // Tablet Layout (600px - 1023px)
@@ -162,7 +170,10 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                     ),
                     const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
                     Expanded(
-                      child: _getScreenWidget(currentKey),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: _getScreenWidget(currentKey),
+                      ),
                     ),
                   ],
                 ),
@@ -178,7 +189,10 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                     ),
                     const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
                     Expanded(
-                      child: _getScreenWidget(currentKey),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: _getScreenWidget(currentKey),
+                      ),
                     ),
                   ],
                 ),
@@ -302,7 +316,7 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                       children: [
                         Expanded(
                           child: InkWell(
-                            onTap: () => _viewModel.toggleAdminRoleView(UserRole.doctor),
+                            onTap: () => _switchPortal(UserRole.doctor),
                             borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 6),
@@ -322,7 +336,7 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                         ),
                         Expanded(
                           child: InkWell(
-                            onTap: () => _viewModel.toggleAdminRoleView(UserRole.secretary),
+                            onTap: () => _switchPortal(UserRole.secretary),
                             borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 6),
