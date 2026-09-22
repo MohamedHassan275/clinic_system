@@ -3,7 +3,8 @@ import '../../modules/auth/data/cubit/auth_cubit.dart';
 import '../../modules/auth/data/repo/auth_repo.dart';
 import '../../modules/auth/view/login_view_model.dart';
 import '../../modules/clinic/data/cubit/clinic_cubit.dart';
-import '../../modules/clinic/data/repo/clinic_repo.dart';
+import '../../modules/clinic/data/repo/clinic_repository.dart';
+import '../../modules/clinic/data/repo/local_clinic_repository.dart';
 import '../../modules/clinic/view/clinic_view_model.dart';
 import '../../modules/main_shell/view/main_shell_view_model.dart';
 import '../../modules/shift/data/cubit/shift_cubit.dart';
@@ -17,7 +18,7 @@ Future<void> initServiceLocator() async {
   // Repositories
   sl.registerLazySingleton<AuthRepo>(() => AuthRepoImpl());
   sl.registerLazySingleton<ShiftRepo>(() => ShiftRepoImpl());
-  sl.registerLazySingleton<ClinicRepo>(() => ClinicRepoImpl());
+  sl.registerLazySingleton<ClinicRepository>(() => LocalClinicRepository());
 
   // Cubits (Factory & Singleton)
   sl.registerFactory(() => AuthCubit(sl()));

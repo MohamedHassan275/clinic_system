@@ -4,7 +4,7 @@ import '../../../../core/enums/appointment_enums.dart';
 import '../../../../core/enums/payment_enums.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../shared/cubit/base_cubit.dart';
-import '../repo/clinic_repo.dart';
+import '../repo/clinic_repository.dart';
 
 enum ClinicApiType {
   none,
@@ -38,7 +38,7 @@ enum ClinicApiType {
 }
 
 class ClinicCubit extends BaseCubit<ClinicApiType> {
-  final ClinicRepo _clinicRepo;
+  final ClinicRepository _clinicRepo;
 
   ClinicCubit(this._clinicRepo) : super(ClinicApiType.none);
 

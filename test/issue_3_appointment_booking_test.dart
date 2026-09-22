@@ -2,9 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dartz/dartz.dart';
 import 'package:clinic_system/core/common/error_handler/failure.dart';
 import 'package:clinic_system/modules/clinic/data/cubit/clinic_cubit.dart';
-import 'package:clinic_system/modules/clinic/data/repo/clinic_repo.dart';
+import 'package:clinic_system/modules/clinic/data/repo/clinic_repository.dart';
 
-class FakeAppointmentRepo extends Fake implements ClinicRepo {
+class FakeAppointmentRepo extends Fake implements ClinicRepository {
   List<Map<String, dynamic>> mockAppointments = [];
   List<Map<String, dynamic>> mockQueue = [];
   bool shouldFail = false;

@@ -3,9 +3,9 @@ import 'package:dartz/dartz.dart';
 import 'package:clinic_system/core/common/error_handler/failure.dart';
 import 'package:clinic_system/core/enums/appointment_enums.dart';
 import 'package:clinic_system/modules/clinic/data/cubit/clinic_cubit.dart';
-import 'package:clinic_system/modules/clinic/data/repo/clinic_repo.dart';
+import 'package:clinic_system/modules/clinic/data/repo/clinic_repository.dart';
 
-class FakeWaitingQueueRepo extends Fake implements ClinicRepo {
+class FakeWaitingQueueRepo extends Fake implements ClinicRepository {
   List<Map<String, dynamic>> mockAppointments = [
     {
       'id': 101,
