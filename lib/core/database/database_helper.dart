@@ -1244,6 +1244,42 @@ class DatabaseHelper {
     });
   }
 
+  Future<Map<String, dynamic>?> getSyncMetadata(String tableName) async {
+    final db = await database;
+    final res = await db.query(
+      'sync_metadata',
+      where: 'table_name = ?',
+      whereArgs: [tableName],
+    );
+    if (res.isNotEmpty) {
+      return res.first;
+    }
+    return null;
+  }
+
+  Future<void> setSyncMetadata(
+    String tableName, {
+    String? lastSyncAt,
+    String? lastPullAt,
+    String? lastPushAt,
+    String? deviceId,
+  }) async {
+    final db = await database;
+    final Map<String, dynamic> values = {
+      'table_name': tableName,
+    };
+    if (lastSyncAt != null) values['last_sync_at'] = lastSyncAt;
+    if (lastPullAt != null) values['last_pull_at'] = lastPullAt;
+    if (lastPushAt != null) values['last_push_at'] = lastPushAt;
+    if (deviceId != null) values['device_id'] = deviceId;
+
+    await db.insert(
+      'sync_metadata',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<String> getOrCreateDeviceId() async {
     final db = await database;
     return await getDeviceId(db);

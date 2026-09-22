@@ -5,6 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../common/error_handler/app_logger.dart';
 import '../database/database_helper.dart';
 import '../security/session_manager.dart';
@@ -77,11 +78,11 @@ class SyncService {
   void setSyncEnabled(bool enabled) {
     if (_isSyncEnabled == enabled) return;
     _isSyncEnabled = enabled;
-    if (enabled) {
-      syncAll();
+    if (!enabled) {
+      _setStatus(SyncStatus.offline);
       return;
     }
-    _setStatus(SyncStatus.offline);
+    syncAll();
   }
 
   void _setStatus(SyncStatus newStatus) {
@@ -92,12 +93,12 @@ class SyncService {
   void _startConnectivityListener() {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
       final isConnected = !results.contains(ConnectivityResult.none);
-      if (isConnected && _isSyncEnabled) {
-        syncAll();
-        return;
-      }
       if (!isConnected) {
         _setStatus(SyncStatus.offline);
+        return;
+      }
+      if (_isSyncEnabled) {
+        syncAll();
       }
     });
   }
@@ -120,7 +121,50 @@ class SyncService {
     }
   }
 
-  /// Full Sync pipeline: Push local outbox changes -> Pull remote delta changes
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Sync Metadata Helpers (sync_metadata table)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<String?> getGlobalLastPullAt() async {
+    final meta = await DatabaseHelper.instance.getSyncMetadata('__global__');
+    return meta?['last_pull_at'] as String?;
+  }
+
+  Future<void> setGlobalLastPullAt(DateTime dt) async {
+    await DatabaseHelper.instance.setSyncMetadata(
+      '__global__',
+      lastPullAt: dt.toIso8601String(),
+    );
+  }
+
+  Future<String?> getTableLastPullAt(String table) async {
+    final meta = await DatabaseHelper.instance.getSyncMetadata(table);
+    return meta?['last_pull_at'] as String?;
+  }
+
+  Future<void> setTableLastPullAt(String table, DateTime dt) async {
+    await DatabaseHelper.instance.setSyncMetadata(
+      table,
+      lastPullAt: dt.toIso8601String(),
+    );
+  }
+
+  Future<bool> isMigrationCompleted() async {
+    final meta = await DatabaseHelper.instance.getSyncMetadata('migration');
+    return meta?['last_sync_at'] != null;
+  }
+
+  Future<void> setMigrationCompleted() async {
+    await DatabaseHelper.instance.setSyncMetadata(
+      'migration',
+      lastSyncAt: DateTime.now().toIso8601String(),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Full Sync Pipeline
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Future<void> syncAll() async {
     if (!_isSyncEnabled) {
       _setStatus(SyncStatus.offline);
@@ -154,13 +198,101 @@ class SyncService {
     }
   }
 
-  /// Push local outbox mutations to Supabase
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Push Operations (Local sync_queue & sync_outbox -> Cloud Supabase)
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Future<void> pushPendingChanges() async {
     final client = _supabaseClient;
     if (client == null) return;
 
+    await _pushSyncQueue(client);
+    await _pushSyncOutbox(client);
+  }
+
+  Future<void> _pushSyncQueue(SupabaseClient client) async {
+    final pendingItems = await DatabaseHelper.instance.getPendingSyncQueue(limit: 50);
+    if (pendingItems.isEmpty) return;
+
+    final deviceId = await DatabaseHelper.instance.getOrCreateDeviceId();
+
+    for (final item in pendingItems) {
+      final int queueId = item['id'] as int;
+      final String table = item['table_name'] as String;
+      final int recordId = item['record_id'] as int;
+      final String? remoteId = item['remote_id'] as String?;
+      final String op = item['operation'] as String;
+      final String? payloadStr = item['payload'] as String?;
+      final int retryCount = item['retry_count'] as int? ?? 0;
+
+      if (retryCount >= 5) continue;
+
+      if (retryCount > 0) {
+        final delaySeconds = math.min(math.pow(2, retryCount).toInt(), 30);
+        AppLogger.info('Retrying sync queue item #$queueId (attempt $retryCount) with ${delaySeconds}s exponential backoff...');
+        await Future.delayed(Duration(seconds: delaySeconds));
+      }
+
+      try {
+        Map<String, dynamic> payload = {};
+        if (payloadStr != null && payloadStr.isNotEmpty) {
+          payload = jsonDecode(payloadStr) as Map<String, dynamic>;
+        }
+
+        // Clean payload for Supabase: remove local-only columns sync_status and is_deleted
+        final Map<String, dynamic> remotePayload = Map<String, dynamic>.from(payload);
+        remotePayload.remove('sync_status');
+
+        final bool isDeletedLocally = (remotePayload['is_deleted'] == 1 || remotePayload['is_deleted'] == true || op == 'DELETE');
+        remotePayload.remove('is_deleted');
+
+        if (isDeletedLocally) {
+          remotePayload['deleted_at'] ??= DateTime.now().toIso8601String();
+        }
+
+        switch (op) {
+          case 'INSERT':
+          case 'UPDATE':
+            await client.from(table).upsert(remotePayload);
+            break;
+          case 'DELETE':
+            await client.from(table).update({
+              'deleted_at': DateTime.now().toIso8601String(),
+            }).eq('id', recordId);
+            break;
+        }
+
+        await DatabaseHelper.instance.markSyncQueueItemSynced(queueId);
+        await DatabaseHelper.instance.insertSyncLog(
+          tableName: table,
+          operation: op,
+          localId: recordId,
+          remoteId: remoteId,
+          status: 'success',
+          details: 'Pushed item #$queueId via sync_queue',
+          deviceId: deviceId,
+        );
+      } catch (e) {
+        AppLogger.error('Failed pushing sync_queue item #$queueId for table $table: $e');
+        await DatabaseHelper.instance.markSyncQueueItemFailed(queueId, e.toString(), retryCount + 1);
+        await DatabaseHelper.instance.insertSyncLog(
+          tableName: table,
+          operation: op,
+          localId: recordId,
+          remoteId: remoteId,
+          status: 'failed',
+          details: e.toString(),
+          deviceId: deviceId,
+        );
+      }
+    }
+  }
+
+  Future<void> _pushSyncOutbox(SupabaseClient client) async {
     final pendingEvents = await DatabaseHelper.instance.getPendingOutboxEvents(limit: 50);
     if (pendingEvents.isEmpty) return;
+
+    final deviceId = await DatabaseHelper.instance.getOrCreateDeviceId();
 
     for (final event in pendingEvents) {
       final int outboxId = event['id'] as int;
@@ -184,56 +316,83 @@ class SyncService {
           payload = jsonDecode(payloadStr) as Map<String, dynamic>;
         }
 
+        // Clean payload for Supabase: remove local-only columns sync_status and is_deleted
+        final Map<String, dynamic> remotePayload = Map<String, dynamic>.from(payload);
+        remotePayload.remove('sync_status');
+
+        final bool isDeletedLocally = (remotePayload['is_deleted'] == 1 || remotePayload['is_deleted'] == true || op == 'DELETE');
+        remotePayload.remove('is_deleted');
+
+        if (isDeletedLocally) {
+          remotePayload['deleted_at'] ??= DateTime.now().toIso8601String();
+        }
+
         switch (op) {
           case 'INSERT':
-            await client.from(table).upsert(payload);
+            await client.from(table).upsert(remotePayload);
             break;
           case 'UPDATE':
-            await client.from(table).update(payload).eq('id', recordId);
+            await client.from(table).update(remotePayload).eq('id', recordId);
             break;
           case 'DELETE':
             await client.from(table).update({
-              'is_deleted': 1,
-              'updated_at': DateTime.now().toIso8601String(),
+              'deleted_at': DateTime.now().toIso8601String(),
             }).eq('id', recordId);
             break;
         }
 
         await DatabaseHelper.instance.markOutboxEventSynced(outboxId);
+        await DatabaseHelper.instance.insertSyncLog(
+          tableName: table,
+          operation: op,
+          localId: recordId,
+          status: 'success',
+          details: 'Pushed outbox event #$outboxId',
+          deviceId: deviceId,
+        );
       } catch (e) {
         AppLogger.error('Failed pushing outbox event #$outboxId for table $table: $e');
         await DatabaseHelper.instance.markOutboxEventFailed(outboxId, e.toString());
+        await DatabaseHelper.instance.insertSyncLog(
+          tableName: table,
+          operation: op,
+          localId: recordId,
+          status: 'failed',
+          details: e.toString(),
+          deviceId: deviceId,
+        );
       }
     }
   }
 
-  /// Pull remote delta updates from Supabase into local SQLite with Last-Write-Wins Conflict Resolution
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Pull Operations (Cloud Supabase -> Local SQLite Delta Pull)
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Future<void> pullRemoteChanges() async {
     final client = _supabaseClient;
     if (client == null) return;
 
     final db = await DatabaseHelper.instance.database;
+    final deviceId = await DatabaseHelper.instance.getOrCreateDeviceId();
 
-    // Get active clinic ID
     final user = SessionManager.instance.currentUser;
     final int clinicId = (user != null && user['clinic_id'] != null) ? (user['clinic_id'] as int) : 1;
 
-    // Get last pull timestamp from local settings
-    final lastPullRes = await db.query('settings', where: 'key = ?', whereArgs: ['last_pull_at']);
-    final String? lastPullAt = lastPullRes.isNotEmpty ? (lastPullRes.first['value'] as String?) : null;
-
-    final nowStr = DateTime.now().toIso8601String();
+    final String? globalLastPull = await getGlobalLastPullAt();
 
     for (final table in _syncableTables) {
       try {
+        final String? tableLastPull = await getTableLastPullAt(table) ?? globalLastPull;
+
         dynamic query = client.from(table).select();
 
         if (table != 'settings' && table != 'icd10_codes') {
           query = query.eq('clinic_id', clinicId);
         }
 
-        if (lastPullAt != null && lastPullAt.isNotEmpty) {
-          query = query.gt('updated_at', lastPullAt);
+        if (tableLastPull != null && tableLastPull.isNotEmpty) {
+          query = query.gt('updated_at', tableLastPull);
         } else {
           query = query.limit(500);
         }
@@ -241,49 +400,67 @@ class SyncService {
         final List<dynamic> remoteRows = await query;
         if (remoteRows.isEmpty) continue;
 
+        int pulledCount = 0;
         for (final item in remoteRows) {
           if (item is! Map<String, dynamic>) continue;
           final Map<String, dynamic> remoteRow = Map<String, dynamic>.from(item);
 
           await _upsertLocal(db, table, remoteRow);
+          pulledCount++;
         }
+
+        final pullTime = DateTime.now();
+        await setTableLastPullAt(table, pullTime);
+
+        await DatabaseHelper.instance.insertSyncLog(
+          tableName: table,
+          operation: 'PULL',
+          status: 'success',
+          details: 'Pulled $pulledCount remote rows',
+          deviceId: deviceId,
+        );
       } catch (e) {
         AppLogger.error('Failed pulling delta changes for table $table: $e');
+        await DatabaseHelper.instance.insertSyncLog(
+          tableName: table,
+          operation: 'PULL',
+          status: 'failed',
+          details: e.toString(),
+          deviceId: deviceId,
+        );
       }
     }
 
-    // Save updated last_pull_at timestamp
-    await db.insert(
-      'settings',
-      {
-        'clinic_id': clinicId,
-        'key': 'last_pull_at',
-        'value': nowStr,
-        'updated_at': nowStr,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await setGlobalLastPullAt(DateTime.now());
   }
 
   /// Upserts remote row into local SQLite with Last-Write-Wins (LWW) conflict resolution
   Future<void> _upsertLocal(Database db, String table, Map<String, dynamic> remoteRow) async {
-    final int? id = remoteRow['id'] as int?;
+    final Map<String, dynamic> localRow = Map<String, dynamic>.from(remoteRow);
+
+    // Map sync_status and is_deleted for local SQLite storage
+    localRow['sync_status'] = 'synced';
+
+    if (localRow.containsKey('deleted_at') && localRow['deleted_at'] != null) {
+      localRow['is_deleted'] = 1;
+    }
+
+    final int? id = localRow['id'] as int?;
     if (id == null) {
-      await db.insert(table, remoteRow, conflictAlgorithm: ConflictAlgorithm.replace);
+      await db.insert(table, localRow, conflictAlgorithm: ConflictAlgorithm.replace);
       return;
     }
 
     final localRows = await db.query(table, where: 'id = ?', whereArgs: [id]);
     if (localRows.isNotEmpty) {
-      final localRow = localRows.first;
-      final String? localUpdatedAtStr = localRow['updated_at'] as String?;
+      final existingLocal = localRows.first;
+      final String? localUpdatedAtStr = existingLocal['updated_at'] as String?;
       final String? remoteUpdatedAtStr = remoteRow['updated_at'] as String?;
 
       if (localUpdatedAtStr != null && remoteUpdatedAtStr != null) {
         final localDate = DateTime.tryParse(localUpdatedAtStr);
         final remoteDate = DateTime.tryParse(remoteUpdatedAtStr);
 
-        // If local record is strictly newer than remote record, keep local record (Local Write Wins until Outbox pushes)
         if (localDate != null && remoteDate != null && localDate.isAfter(remoteDate)) {
           AppLogger.info('Conflict Resolution (LWW): Local record #$id in table $table is newer than remote. Retaining local.');
           return;
@@ -291,11 +468,11 @@ class SyncService {
       }
     }
 
-    // Remote is newer or record doesn't exist locally -> Upsert to local SQLite without generating new outbox records
     await db.insert(
       table,
-      remoteRow,
+      localRow,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 }
+
