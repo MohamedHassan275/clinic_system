@@ -1280,6 +1280,42 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> updateRecordRemoteId(String tableName, int localId, String remoteId) async {
+    final db = await database;
+    try {
+      final info = await db.rawQuery("PRAGMA table_info($tableName)");
+      final hasRemoteId = info.any((col) => col['name'] == 'remote_id');
+      if (hasRemoteId) {
+        await db.update(
+          tableName,
+          {'remote_id': remoteId},
+          where: 'id = ?',
+          whereArgs: [localId],
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<String?> getLocalRecordRemoteId(String tableName, int localId) async {
+    final db = await database;
+    try {
+      final info = await db.rawQuery("PRAGMA table_info($tableName)");
+      final hasRemoteId = info.any((col) => col['name'] == 'remote_id');
+      if (hasRemoteId) {
+        final res = await db.query(
+          tableName,
+          columns: ['remote_id'],
+          where: 'id = ?',
+          whereArgs: [localId],
+        );
+        if (res.isNotEmpty && res.first['remote_id'] != null) {
+          return res.first['remote_id'] as String;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<String> getOrCreateDeviceId() async {
     final db = await database;
     return await getDeviceId(db);
