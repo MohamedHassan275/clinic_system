@@ -35,7 +35,7 @@ void main() {
       expect(version, equals(18));
     });
 
-    test('2. All 11 sync tables contain the 5 required sync columns', () async {
+    test('2. All 18 sync tables contain the 5 required sync columns', () async {
       final syncTables = [
         'clinics',
         'users',
@@ -44,10 +44,17 @@ void main() {
         'waiting_queue',
         'medical_records',
         'prescriptions',
+        'prescription_items',
         'invoices',
         'invoice_items',
+        'refunds',
         'inventory',
         'shifts',
+        'lab_results',
+        'patient_attachments',
+        'categories',
+        'services',
+        'insurance_companies',
       ];
 
       for (final table in syncTables) {
@@ -104,7 +111,7 @@ void main() {
       expect(logId, greaterThan(0));
     });
 
-    test('5. Unique index idx_{table}_remote_id exists for all 11 sync tables', () async {
+    test('5. Unique index idx_{table}_remote_id exists for all 18 sync tables', () async {
       final syncTables = [
         'clinics',
         'users',
@@ -113,10 +120,17 @@ void main() {
         'waiting_queue',
         'medical_records',
         'prescriptions',
+        'prescription_items',
         'invoices',
         'invoice_items',
+        'refunds',
         'inventory',
         'shifts',
+        'lab_results',
+        'patient_attachments',
+        'categories',
+        'services',
+        'insurance_companies',
       ];
 
       for (final table in syncTables) {

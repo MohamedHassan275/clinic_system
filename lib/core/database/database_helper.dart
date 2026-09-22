@@ -68,7 +68,9 @@ class DatabaseHelper {
       final syncTables = [
         'clinics', 'users', 'patients', 'appointments',
         'waiting_queue', 'medical_records', 'prescriptions',
-        'invoices', 'invoice_items', 'inventory', 'shifts',
+        'prescription_items', 'invoices', 'invoice_items', 'refunds',
+        'inventory', 'shifts', 'lab_results', 'patient_attachments',
+        'categories', 'services', 'insurance_companies',
       ];
 
       for (final table in syncTables) {
