@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/di/service_locator.dart';
 import 'base_cubit.dart';
 
 class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWidget {
@@ -22,15 +23,27 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
 
   @override
   Widget build(BuildContext context) {
+    CubitClass? cubit;
+    try {
+      cubit = context.read<CubitClass>();
+    } catch (_) {
+      if (sl.isRegistered<CubitClass>()) {
+        cubit = sl<CubitClass>();
+      }
+    }
+
+    if (cubit == null) return body(types.first);
+
     return BlocBuilder<CubitClass, BaseState<S>>(
+      bloc: cubit,
       buildWhen: (p, c) => types.contains(c.type),
       builder: (context, state) {
-        final CubitClass cubit = context.read<CubitClass>();
+        final CubitClass activeCubit = cubit!;
         final S activeType = types.contains(state.type) ? state.type : types.first;
 
-        final isLoading = types.any((t) => cubit.stateOf(t).isLoading());
-        final isError = !isLoading && types.any((t) => cubit.stateOf(t).isError());
-        final isLoadMore = !isLoading && !isError && types.any((t) => cubit.stateOf(t).isPaginationLoadMore());
+        final isLoading = types.any((t) => activeCubit.stateOf(t).isLoading());
+        final isError = !isLoading && types.any((t) => activeCubit.stateOf(t).isError());
+        final isLoadMore = !isLoading && !isError && types.any((t) => activeCubit.stateOf(t).isPaginationLoadMore());
 
         if (isLoading) {
           return loading != null
@@ -43,7 +56,7 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
                 );
         }
         if (isError) {
-          final errorMsg = cubit.errorMessageOf(activeType) ?? 'حدث خطأ في تحميل البيانات';
+          final errorMsg = activeCubit.errorMessageOf(activeType) ?? 'حدث خطأ في تحميل البيانات';
           return error != null
               ? error!(activeType)
               : Center(
@@ -68,8 +81,8 @@ class BlockBuilderWidget<CubitClass extends BaseCubit<S>, S> extends StatelessWi
                               onRetry!();
                             } else {
                               for (var t in types) {
-                                if (cubit.stateOf(t).isError()) {
-                                  await cubit.retry(t);
+                                if (activeCubit.stateOf(t).isError()) {
+                                  await activeCubit.retry(t);
                                 }
                               }
                             }

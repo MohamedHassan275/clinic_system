@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/enums/appointment_enums.dart';
 import '../../../../../core/enums/payment_enums.dart';
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/utils/date_formatter.dart';
 
 class PatientProfileTabWidget extends StatelessWidget {
   final Map<String, dynamic> patient;
@@ -19,7 +20,7 @@ class PatientProfileTabWidget extends StatelessWidget {
     final String phone = patient['phone'] ?? 'غير مسجل';
     final String nationalId = patient['national_id'] ?? 'غير مسجل';
     final int age = (patient['age'] as num?)?.toInt() ?? 0;
-    final String dob = patient['dob'] ?? 'غير مسجل';
+    final String dob = DateFormatter.formatDate(patient['dob'], fallback: 'غير مسجل');
 
     final String genderRaw = patient['gender'] ?? 'male';
     final PatientGender gender = PatientGender.fromString(genderRaw);
@@ -143,7 +144,7 @@ class PatientProfileTabWidget extends StatelessWidget {
                   items: [
                     _InfoItem('جهة التعاقد / الفئة', contractEntity.displayName),
                     _InfoItem('هاتف الطوارئ / القرابة', emergencyPhone),
-                    _InfoItem('تاريخ التسجيل بالعيادة', patient['created_at'] ?? 'غير محدد'),
+                    _InfoItem('تاريخ التسجيل بالعيادة', DateFormatter.formatDate(patient['created_at'], fallback: 'غير محدد')),
                   ],
                 ),
               ),

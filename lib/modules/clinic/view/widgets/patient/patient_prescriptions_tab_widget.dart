@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/common/widgets/app_dialog.dart';
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/utils/date_formatter.dart';
 
 class PatientPrescriptionsTabWidget extends StatelessWidget {
   final Map<String, dynamic>? selectedPatientRecord;
@@ -22,7 +23,7 @@ class PatientPrescriptionsTabWidget extends StatelessWidget {
       context: context,
       builder: (ctx) => AppDialog(
         title: 'تفاصيل الروشتة الإلكترونية',
-        subtitle: 'تاريخ الصدور: $date | الطبيب المعالج: د. $doctorName',
+        subtitle: 'تاريخ الصدور: ${DateFormatter.formatDate(date)} | الطبيب المعالج: د. $doctorName',
         icon: Icons.receipt_long_rounded,
         iconColor: AppColors.primary,
         maxWidth: 550,
@@ -153,7 +154,7 @@ class PatientPrescriptionsTabWidget extends StatelessWidget {
                                       const Icon(Icons.receipt_rounded, color: AppColors.primary, size: 20),
                                       const SizedBox(width: 8),
                                       Text(
-                                        'روشتة بتاريخ: $date',
+                                        'روشتة بتاريخ: ${DateFormatter.formatDate(date)}',
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                       ),
                                     ],

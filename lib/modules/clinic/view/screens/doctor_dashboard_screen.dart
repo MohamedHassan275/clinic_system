@@ -9,6 +9,8 @@ import '../../../shared/cubit/block_builder_widget.dart';
 import '../../../main_shell/view/main_shell_view_model.dart';
 import '../../data/cubit/clinic_cubit.dart';
 import '../clinic_view_model.dart';
+import 'consultation_screen.dart';
+import 'patient_detail_hub_screen.dart';
 
 class DoctorDashboardScreen extends StatefulWidget {
   const DoctorDashboardScreen({super.key});
@@ -411,14 +413,14 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
               label: '🩺 الكشف والروشتة الإلكترونية',
               icon: Icons.medical_services_rounded,
               color: AppColors.primary,
-              onPressed: () => sl<MainShellViewModel>().selectTabByKey('consultation'),
+              onPressed: _onQuickConsultation,
             ),
             const SizedBox(height: 10),
             _buildActionButton(
               label: '👤 البحث في ملفات المرضى (EMR)',
               icon: Icons.folder_shared_rounded,
               color: AppColors.secondary,
-              onPressed: () => sl<MainShellViewModel>().selectTabByKey('emr'),
+              onPressed: _onQuickDoctorEmrSearch,
             ),
           ],
         ),
@@ -434,7 +436,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
             label: isMobile ? '🩺 الكشف' : '🩺 الكشف والروشتة الإلكترونية',
             icon: Icons.medical_services_rounded,
             color: AppColors.primary,
-            onPressed: () => sl<MainShellViewModel>().selectTabByKey('consultation'),
+            onPressed: _onQuickConsultation,
           ),
         ),
         const SizedBox(width: 10),
@@ -443,7 +445,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
             label: isMobile ? '👤 المرضى' : '👤 ملفات المرضى (EMR)',
             icon: Icons.folder_shared_rounded,
             color: AppColors.secondary,
-            onPressed: () => sl<MainShellViewModel>().selectTabByKey('emr'),
+            onPressed: _onQuickDoctorEmrSearch,
           ),
         ),
       ],
@@ -512,10 +514,31 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                child: Text(apptStatus.displayName, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11)),
+              GestureDetector(
+                onTap: () async {
+                  if (!ShiftGuard.checkShiftOrWarn(context)) return;
+                  final int apptId = item['id'] as int;
+                  final int pId = item['patient_id'] as int;
+                  if (apptStatus.isWaiting) {
+                    await _viewModel.clinicCubit.checkInPatient(apptId);
+                  }
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ConsultationScreen(
+                          appointmentId: apptId,
+                          patientId: pId,
+                        ),
+                      ),
+                    );
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                  child: Text(apptStatus.displayName, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
               ),
               const SizedBox(width: 6),
               IconButton(
@@ -524,10 +547,21 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                 onPressed: () async {
                   if (!ShiftGuard.checkShiftOrWarn(context)) return;
                   final int apptId = item['id'] as int;
+                  final int pId = item['patient_id'] as int;
                   if (apptStatus.isWaiting) {
                     await _viewModel.clinicCubit.checkInPatient(apptId);
                   }
-                  sl<MainShellViewModel>().selectTabByKey('consultation');
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ConsultationScreen(
+                          appointmentId: apptId,
+                          patientId: pId,
+                        ),
+                      ),
+                    );
+                  }
                 },
               ),
             ],
@@ -558,6 +592,267 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           leading: const Icon(Icons.check_circle, color: AppColors.success, size: 18),
           title: Text(item['patient_name'] ?? 'مريض', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           subtitle: Text('كشف مكتمل - ${item['time_slot'] ?? ''}', style: const TextStyle(fontSize: 11)),
+        );
+      },
+    );
+  }
+
+  void _onQuickConsultation() {
+    if (!ShiftGuard.checkShiftOrWarn(context)) return;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final waitingList = _viewModel.clinicCubit.waitingQueue;
+            final filtered = waitingList.where((item) {
+              final name = (item['patient_name'] ?? '').toString().toLowerCase();
+              return name.contains(searchQuery.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.medical_services_rounded, color: AppColors.primary),
+                  SizedBox(width: 8),
+                  Text('الكشف والروشتة الإلكترونية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('اختر مريضاً من قائمة الانتظار للبدء بالكشف فوراً أو ابحث باسم المريض:'),
+                    const SizedBox(height: 12),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'بحث باسم المريض...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          searchQuery = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 220),
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  searchQuery.isEmpty ? 'لا يوجد مرضى في قائمة الانتظار حالياً' : 'لا يوجد مريض يطابق البحث',
+                                  style: const TextStyle(color: AppColors.textSecondary),
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, _) => const Divider(height: 1),
+                              itemBuilder: (ctx, idx) {
+                                final item = filtered[idx];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(item['patient_name'] ?? 'مريض', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: Text('رقم الانتظار: #${item['queue_number'] ?? idx + 1} | الشكوى: ${item['reason'] ?? 'كشف عام'}'),
+                                  trailing: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    ),
+                                    icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                                    label: const Text('بدء الكشف', style: TextStyle(fontSize: 12)),
+                                     onPressed: () async {
+                                       Navigator.of(dialogCtx).pop();
+                                       final int? apptId = item['id'] as int?;
+                                       final int? pId = item['patient_id'] as int?;
+                                       if (apptId != null) {
+                                         await _viewModel.clinicCubit.checkInPatient(apptId);
+                                       }
+                                       if (context.mounted) {
+                                         Navigator.push(
+                                           context,
+                                           MaterialPageRoute(
+                                             builder: (_) => ConsultationScreen(
+                                               appointmentId: apptId,
+                                               patientId: pId,
+                                             ),
+                                           ),
+                                         );
+                                       }
+                                     },
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: const Text('الانتقال لغرفة الكشف'),
+                  onPressed: () {
+                    Navigator.of(dialogCtx).pop();
+                    sl<MainShellViewModel>().selectTabByKey('consultation');
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _onQuickDoctorEmrSearch() {
+    if (_viewModel.clinicCubit.patients.isEmpty) {
+      _viewModel.clinicCubit.fetchPatients();
+    }
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final rawPatients = _viewModel.clinicCubit.patients;
+            final uniquePatientsMap = <int, Map<String, dynamic>>{};
+            for (final p in rawPatients) {
+              final id = p['id'] as int?;
+              if (id != null && !uniquePatientsMap.containsKey(id)) {
+                uniquePatientsMap[id] = p;
+              }
+            }
+            final allPatients = uniquePatientsMap.values.toList();
+
+            final matches = allPatients.where((item) {
+              if (searchQuery.trim().isEmpty) return true;
+              final name = (item['name'] ?? '').toString().toLowerCase();
+              final phone = (item['phone'] ?? '').toString();
+              final q = searchQuery.toLowerCase().trim();
+              return name.contains(q) || phone.contains(q);
+            }).toList();
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.folder_shared_rounded, color: AppColors.secondary),
+                  SizedBox(width: 8),
+                  Text('البحث السريع في ملفات المرضى (EMR)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('ابحث باسم المريض أو رقم الهاتف للاطلاع السريع على سجله الطبي:'),
+                    const SizedBox(height: 12),
+                    TextField(
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'اسم المريض أو رقم الهاتف...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          searchQuery = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 280),
+                      child: matches.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text('لم يتم العثور على مريض بهذا الاسم أو الهاتف', style: TextStyle(color: AppColors.textSecondary)),
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: matches.length,
+                              separatorBuilder: (_, _) => const Divider(height: 1),
+                              itemBuilder: (ctx, idx) {
+                                final item = matches[idx];
+                                return ListTile(
+                                  dense: true,
+                                  leading: CircleAvatar(
+                                    backgroundColor: AppColors.secondary.withValues(alpha: 0.15),
+                                    child: Text(
+                                      (item['name'] as String? ?? 'P')[0],
+                                      style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  title: Text(item['name'] ?? 'مريض', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  subtitle: Text(
+                                    'الهاتف: ${item['phone'] ?? 'غير مدخل'} | السن: ${item['age'] ?? 'غير محدد'} سنة | فصيلة الدم: ${item['blood_group'] ?? 'غير محدد'}',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  trailing: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.secondary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    icon: const Icon(Icons.folder_open_rounded, size: 16),
+                                    label: const Text('فتح الملف', style: TextStyle(fontSize: 12)),
+                                    onPressed: () {
+                                      Navigator.of(dialogCtx).pop();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => PatientDetailHubScreen(patient: item),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('فتح الشاشة الشاملة (EMR)'),
+                  onPressed: () {
+                    Navigator.of(dialogCtx).pop();
+                    sl<MainShellViewModel>().selectTabByKey('emr');
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );

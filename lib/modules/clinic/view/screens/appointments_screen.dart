@@ -12,6 +12,7 @@ import '../../../../core/responsive/responsive_layout.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../../core/security/shift_guard.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_formatter.dart';
 import '../../../shared/cubit/block_builder_widget.dart';
 import '../../../shift/view/shift_screen.dart';
 import '../../data/cubit/clinic_cubit.dart';
@@ -96,7 +97,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: BlockBuilderWidget<ClinicCubit, ClinicApiType>(
-        types: const [ClinicApiType.getAppointments, ClinicApiType.addAppointment, ClinicApiType.updateAppointmentStatus],
+        types: const [ClinicApiType.getAppointments, ClinicApiType.addAppointment, ClinicApiType.getWaitingRoom],
         loading: (_) => const Center(child: CircularProgressIndicator()),
         body: (_) => ResponsiveLayout(
           mobile: _buildMobileLayout(),
@@ -172,7 +173,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'جدول مواعيد يوم ${DateFormat('yyyy-MM-dd').format(_selectedDate)}',
+                                'جدول مواعيد يوم ${DateFormatter.formatDate(_selectedDate.toIso8601String())}',
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                               Text(
@@ -439,10 +440,10 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           child: Row(
             children: [
               _buildFilterChip('الكل', 'all'),
-              _buildFilterChip('في الانتظار', 'waiting'),
-              _buildFilterChip('جاري الكشف', 'in_progress'),
-              _buildFilterChip('مكتمل', 'completed'),
-              _buildFilterChip('ملغى', 'cancelled'),
+              _buildFilterChip('جاري الكشف', AppointmentStatus.inProgress.dbValue),
+              _buildFilterChip('في الانتظار', AppointmentStatus.waiting.dbValue),
+              _buildFilterChip('مكتمل', AppointmentStatus.completed.dbValue),
+              _buildFilterChip('ملغى', AppointmentStatus.cancelled.dbValue),
             ],
           ),
         ),

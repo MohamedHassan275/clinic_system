@@ -23,6 +23,7 @@ class SessionManager {
   List<String> _userPermissions = [];
   Map<String, dynamic>? _activeShift;
   DateTime? _lastActivityTime;
+  bool _isOnlineMode = false;
 
   Map<String, dynamic>? get currentUser => _currentUser;
   List<String> get userPermissions => List.unmodifiable(_userPermissions);
@@ -30,6 +31,14 @@ class SessionManager {
   bool get hasActiveShift => _activeShift != null && (_activeShift!['is_closed'] == 0);
   bool get isLoggedIn => _currentUser != null && !_isSessionExpired();
   DateTime? get lastActivityTime => _lastActivityTime;
+  bool get isOnlineMode => _isOnlineMode;
+
+  void setOnlineMode(bool isOnline) {
+    _isOnlineMode = isOnline;
+    if (_currentUser != null) {
+      _currentUser!['is_online_mode'] = isOnline;
+    }
+  }
 
   /// Initializes persistent encrypted session from SecureStorageService on app startup
   Future<void> initPersistentSession() async {
@@ -47,7 +56,10 @@ class SessionManager {
 
         _currentUser = user;
         _parsePermissions(user);
-        _lastActivityTime = DateTime.now();
+        final now = DateTime.now();
+        _lastActivityTime = now;
+        _currentUser!['last_activity_timestamp'] = now.toIso8601String();
+        await _persistSessionToSecureStorage(_currentUser!);
         AppLogger.info('Restored encrypted persistent session for user: ${user['username']}');
 
         // Check if there is an active unclosed shift in SQLite for this user
@@ -70,7 +82,7 @@ class SessionManager {
     }
   }
 
-  void setUserSession(Map<String, dynamic> user, {bool rememberMe = false}) {
+  void setUserSession(Map<String, dynamic> user, {bool rememberMe = true}) {
     final sessionData = Map<String, dynamic>.from(user);
     final now = DateTime.now();
     sessionData['login_timestamp'] = now.toIso8601String();
@@ -131,11 +143,15 @@ class SessionManager {
 
   bool hasPermission(String permission) {
     if (!isLoggedIn) return false;
+    final role = _currentUser?['role'];
+    if (role == 'super_admin' || _userPermissions.contains('*')) {
+      return true;
+    }
     if (_userPermissions.isNotEmpty) {
       return _userPermissions.contains(permission);
     }
     // Fallback if permissions list is empty: admin gets all permissions
-    return _currentUser!['role'] == 'admin';
+    return role == 'admin';
   }
 
   Future<void> clearSession() async {
@@ -159,13 +175,16 @@ class SessionManager {
   bool _isSessionExpiredData(Map<String, dynamic> data) {
     try {
       final now = DateTime.now();
+      final bool rememberMe = data['remember_me'] as bool? ?? true;
 
-      // 1. Check Inactivity Timeout (Default 30 minutes)
-      final lastActStr = data['last_activity_timestamp'] ?? data['login_timestamp'];
-      if (lastActStr != null) {
-        final lastActTime = DateTime.parse(lastActStr);
-        if (now.difference(lastActTime) > defaultInactivityTimeout) {
-          return true; // Expired due to 30 min inactivity
+      // 1. Check Inactivity Timeout (30 minutes) only if rememberMe is false
+      if (!rememberMe) {
+        final lastActStr = data['last_activity_timestamp'] ?? data['login_timestamp'];
+        if (lastActStr != null) {
+          final lastActTime = DateTime.parse(lastActStr);
+          if (now.difference(lastActTime) > defaultInactivityTimeout) {
+            return true; // Expired due to 30 min inactivity
+          }
         }
       }
 
@@ -173,7 +192,6 @@ class SessionManager {
       final loginStr = data['login_timestamp'];
       if (loginStr != null) {
         final loginTime = DateTime.parse(loginStr);
-        final bool rememberMe = data['remember_me'] as bool? ?? false;
         final maxDuration = rememberMe ? rememberMeSessionTimeout : absoluteSessionTimeout;
         if (now.difference(loginTime) > maxDuration) {
           return true; // Expired due to absolute limit

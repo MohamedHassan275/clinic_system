@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/common/widgets/app_dialog.dart';
 import '../../../../../core/security/shift_guard.dart';
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/utils/date_formatter.dart';
 
 class PatientVitalsTabWidget extends StatefulWidget {
   final Map<String, dynamic> patientRecord;
@@ -287,7 +288,7 @@ class _PatientVitalsTabWidgetState extends State<PatientVitalsTabWidget> {
                                       const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.textSecondary),
                                       const SizedBox(width: 6),
                                       Text(
-                                        'تاريخ القياس: ${v['date'] ?? ''}',
+                                        'تاريخ القياس: ${DateFormatter.formatDateTime(v['date'] as String?)}',
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                       ),
                                     ],

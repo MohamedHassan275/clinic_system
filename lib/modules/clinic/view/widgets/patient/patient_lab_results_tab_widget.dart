@@ -4,6 +4,7 @@ import '../../../../../core/common/widgets/app_dialog.dart';
 import '../../../../../core/enums/lab_enums.dart';
 import '../../../../../core/security/shift_guard.dart';
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/utils/date_formatter.dart';
 import '../../../data/cubit/clinic_cubit.dart';
 
 class PatientLabResultsTabWidget extends StatelessWidget {
@@ -199,7 +200,7 @@ class PatientLabResultsTabWidget extends StatelessWidget {
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         subtitle: Text(
-                          'تاريخ الفحص: ${lab['test_date']} | النتيجة: ${lab['measured_value']} ${lab['unit']} | المدى الطبيعي: ${lab['reference_range']}',
+                          'تاريخ الفحص: ${DateFormatter.formatDate(lab['test_date'])} | النتيجة: ${lab['measured_value']} ${lab['unit']} | المدى الطبيعي: ${lab['reference_range']}',
                           style: const TextStyle(fontSize: 12),
                         ),
                         trailing: Container(

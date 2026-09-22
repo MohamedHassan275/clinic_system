@@ -11,9 +11,16 @@ class LoginViewModel extends BaseViewModel {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool isPasswordVisible = false;
+  bool isOnlineMode = false;
 
   void togglePasswordVisibility() {
     isPasswordVisible = !isPasswordVisible;
+    notifyListeners();
+  }
+
+  void toggleOnlineMode(bool value) {
+    isOnlineMode = value;
+    SessionManager.instance.setOnlineMode(value);
     notifyListeners();
   }
 
@@ -34,6 +41,7 @@ class LoginViewModel extends BaseViewModel {
       (failure) => onError(failure.message),
       (userMap) {
         SessionManager.instance.setUserSession(userMap);
+        SessionManager.instance.setOnlineMode(isOnlineMode);
         onSuccess();
       },
     );

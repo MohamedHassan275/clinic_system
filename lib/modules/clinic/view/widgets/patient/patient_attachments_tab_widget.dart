@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../../../core/common/widgets/app_dialog.dart';
 import '../../../../../core/security/shift_guard.dart';
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/utils/date_formatter.dart';
 import '../../../data/cubit/clinic_cubit.dart';
 
 class PatientAttachmentsTabWidget extends StatelessWidget {
@@ -171,7 +172,7 @@ class PatientAttachmentsTabWidget extends StatelessWidget {
                           child: Icon(iconData, color: AppColors.secondary, size: 20),
                         ),
                         title: Text(fileName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: Text('النوع: $fileType | تاريخ الإرفاق: $date', style: const TextStyle(fontSize: 12)),
+                        subtitle: Text('النوع: $fileType | تاريخ الإرفاق: ${DateFormatter.formatDateTime(date)}', style: const TextStyle(fontSize: 12)),
                         trailing: IconButton(
                           icon: const Icon(Icons.open_in_new_rounded, color: AppColors.primary, size: 20),
                           tooltip: 'فتح المستند',

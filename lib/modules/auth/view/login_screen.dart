@@ -244,6 +244,62 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             validator: (v) => (v == null || v.isEmpty) ? 'يرجى إدخال كلمة المرور' : null,
           ),
+          const SizedBox(height: 16),
+          // Online / Offline Toggle Switch Container (#FF6B00 Accent Color)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _viewModel.isOnlineMode
+                  ? const Color(0xFFFF6B00).withValues(alpha: 0.08)
+                  : AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _viewModel.isOnlineMode
+                    ? const Color(0xFFFF6B00)
+                    : AppColors.border,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _viewModel.isOnlineMode ? Icons.cloud_sync_rounded : Icons.wifi_off_rounded,
+                  color: _viewModel.isOnlineMode ? const Color(0xFFFF6B00) : AppColors.textSecondary,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _viewModel.isOnlineMode ? 'Online (أونلاين) 🌐' : 'Offline (أوفلاين) 📴',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: _viewModel.isOnlineMode ? const Color(0xFFFF6B00) : AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _viewModel.isOnlineMode
+                            ? 'المزامنة السحابية عبر Supabase'
+                            : 'العمل السريع على الداتابيز المحلية (SQLite)',
+                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _viewModel.isOnlineMode,
+                  activeThumbColor: const Color(0xFFFF6B00),
+                  activeTrackColor: const Color(0xFFFF6B00).withValues(alpha: 0.3),
+                  inactiveThumbColor: AppColors.textSecondary,
+                  onChanged: (val) => _viewModel.toggleOnlineMode(val),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerLeft,
@@ -275,11 +331,13 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildSubmitButton() {
     return SizedBox(
       width: double.infinity,
-      height: 48,
+      height: 56,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          elevation: 3,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         onPressed: () {
           if (!_formKey.currentState!.validate()) return;
@@ -297,7 +355,12 @@ class _LoginScreenState extends State<LoginScreen> {
         },
         child: const Text(
           'تسجيل الدخول',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: 0.5,
+          ),
         ),
       ),
     );

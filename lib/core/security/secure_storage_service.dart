@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
@@ -88,18 +87,19 @@ class SecureStorageService {
     return _fallbackFile!;
   }
 
-  Future<List<int>> _getOrCreateEncryptionKey() async {
+  List<int> _getOrCreateEncryptionKey() {
     if (_encryptionKey != null) return _encryptionKey!;
-    
-    // Generate or derive a persistent 256-bit (32 bytes) key
-    final random = Random.secure();
-    final keyBytes = List<int>.generate(32, (_) => random.nextInt(256));
-    _encryptionKey = keyBytes;
+    const secretStr = 'clinic_system_sec_key_v1_9847230198471203';
+    _encryptionKey = sha256.convert(utf8.encode(secretStr)).bytes;
     return _encryptionKey!;
   }
 
   Future<Map<String, String>> _loadFallbackCache() async {
     if (_fallbackCache != null) return _fallbackCache!;
+    if (kIsWeb) {
+      _fallbackCache = {};
+      return _fallbackCache!;
+    }
 
     try {
       final file = await _getFallbackFile();
@@ -119,7 +119,7 @@ class SecureStorageService {
       final payloadBytes = bytes.sublist(32);
 
       // Verify HMAC-SHA256 Integrity
-      final key = await _getOrCreateEncryptionKey();
+      final key = _getOrCreateEncryptionKey();
       final hmac = Hmac(sha256, key);
       final computedHmac = hmac.convert(payloadBytes).bytes;
 
@@ -143,10 +143,11 @@ class SecureStorageService {
   }
 
   Future<void> _saveFallbackCache() async {
+    if (kIsWeb) return;
     try {
       final cache = await _loadFallbackCache();
       final file = await _getFallbackFile();
-      final key = await _getOrCreateEncryptionKey();
+      final key = _getOrCreateEncryptionKey();
 
       final jsonString = jsonEncode(cache);
       final payloadBytes = utf8.encode(jsonString);
@@ -184,6 +185,7 @@ class SecureStorageService {
 
   Future<void> _clearFallbackFile() async {
     _fallbackCache = {};
+    if (kIsWeb) return;
     final file = await _getFallbackFile();
     if (await file.exists()) {
       await file.delete();

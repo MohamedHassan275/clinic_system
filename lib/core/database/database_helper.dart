@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../common/error_handler/app_logger.dart';
+import '../security/password_hasher.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -29,7 +31,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 10,
+      version: 18,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -40,33 +42,120 @@ class DatabaseHelper {
       },
     );
 
+    await _ensureRequiredColumnsExist(db);
     await _checkAndSeedUsersIfEmpty(db);
+    await _ensureOwnerAccountExists(db);
     return db;
+  }
+
+  Future<void> _ensureRequiredColumnsExist(Database db) async {
+    try {
+      final allTables = [
+        'users', 'shifts', 'patients', 'appointments',
+        'prescriptions', 'prescription_items', 'invoices', 'refunds',
+        'inventory', 'patient_attachments', 'clinics', 'medicines',
+        'services', 'categories', 'insurance_companies', 'patient_insurance',
+        'stock_movements', 'lab_results', 'lab_orders', 'vitals',
+        'drug_interactions', 'prescription_templates', 'template_items',
+        'icd10_codes', 'settings', 'audit_log',
+      ];
+
+      for (final table in allTables) {
+        await _addColumnIfNotExists(db, table, 'updated_at', 'TEXT');
+        await _addColumnIfNotExists(db, table, 'is_deleted', 'INTEGER DEFAULT 0');
+      }
+
+      final syncTables = [
+        'clinics', 'users', 'patients', 'appointments',
+        'waiting_queue', 'medical_records', 'prescriptions',
+        'invoices', 'invoice_items', 'inventory', 'shifts',
+      ];
+
+      for (final table in syncTables) {
+        await _addColumnIfNotExists(db, table, 'remote_id', 'TEXT');
+        await _addColumnIfNotExists(db, table, 'sync_status', "TEXT DEFAULT 'pending'");
+        await _addColumnIfNotExists(db, table, 'updated_at', 'TEXT');
+        await _addColumnIfNotExists(db, table, 'deleted_at', 'TEXT');
+        await _addColumnIfNotExists(db, table, 'sync_version', 'INTEGER DEFAULT 1');
+        await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_remote_id ON $table(remote_id) WHERE remote_id IS NOT NULL');
+      }
+
+      await _addColumnIfNotExists(db, 'sync_queue', 'clinic_id', 'INTEGER DEFAULT 1');
+      await _addColumnIfNotExists(db, 'sync_queue', 'remote_id', 'TEXT');
+      await _addColumnIfNotExists(db, 'sync_queue', 'last_error', 'TEXT');
+      await _addColumnIfNotExists(db, 'sync_queue', 'sync_status', "TEXT DEFAULT 'pending'");
+      await _addColumnIfNotExists(db, 'sync_queue', 'synced_at', 'TEXT');
+
+      await _addColumnIfNotExists(db, 'invoices', 'status', "TEXT DEFAULT 'paid'");
+      await _addColumnIfNotExists(db, 'invoices', 'cash_amount', 'REAL DEFAULT 0.0');
+      await _addColumnIfNotExists(db, 'invoices', 'card_amount', 'REAL DEFAULT 0.0');
+      await _addColumnIfNotExists(db, 'refunds', 'clinic_id', 'INTEGER DEFAULT 1');
+      await _addColumnIfNotExists(db, 'users', 'password_hash', 'TEXT');
+      await _addColumnIfNotExists(db, 'patients', 'secondary_phone', 'TEXT');
+      await _addColumnIfNotExists(db, 'patients', 'insurance_entity_name', 'TEXT');
+      await _addColumnIfNotExists(db, 'patients', 'policy_number', 'TEXT');
+      await _addColumnIfNotExists(db, 'patients', 'insurance_company_id', 'INTEGER');
+      await _addColumnIfNotExists(db, 'patients', 'coverage_percentage', 'REAL DEFAULT 0');
+
+      await _createSyncTables(db);
+    } catch (e) {
+      AppLogger.error('Failed ensuring required database columns exist: $e');
+    }
+  }
+
+  Future<void> _createSyncTables(Database db) async {
+    // 1. sync_metadata (بيانات المزامنة وتتبع الجهاز)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_metadata (
+        table_name TEXT PRIMARY KEY,
+        device_id TEXT,
+        last_sync_at TEXT,
+        last_pull_at TEXT,
+        last_push_at TEXT,
+        sync_version INTEGER DEFAULT 1
+      )
+    ''');
+
+    // 2. sync_log (سجل عمليات المزامنة والتعارضات)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_time TEXT NOT NULL,
+        table_name TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        local_id INTEGER,
+        remote_id TEXT,
+        status TEXT NOT NULL,
+        details TEXT,
+        device_id TEXT
+      )
+    ''');
   }
 
   Future<void> _onUpgradeMigration(Database db, int oldVersion, int newVersion) async {
     // 1. Create new tables if not exists
     await _createTables(db);
 
-    final oldTables = [
-      'users',
-      'shifts',
-      'patients',
-      'appointments',
-      'prescriptions',
-      'prescription_items',
-      'invoices',
-      'inventory',
-      'lab_results',
-      'patient_attachments'
-    ];
+    if (oldVersion < 17) {
+      final tables = [
+        'users', 'shifts', 'patients', 'appointments',
+        'prescriptions', 'prescription_items', 'invoices', 'refunds',
+        'inventory', 'patient_attachments', 'clinics', 'medicines',
+        'services', 'categories', 'insurance_companies', 'patient_insurance',
+        'stock_movements', 'lab_results', 'lab_orders', 'vitals',
+        'drug_interactions', 'prescription_templates', 'template_items',
+        'icd10_codes', 'settings', 'audit_log',
+      ];
 
-    for (var table in oldTables) {
-      await _addColumnIfNotExists(db, table, 'clinic_id', 'INTEGER DEFAULT 1');
-      await _addColumnIfNotExists(db, table, 'updated_at', 'TEXT');
-      await _addColumnIfNotExists(db, table, 'is_deleted', 'INTEGER DEFAULT 0');
-      await _addColumnIfNotExists(db, table, 'last_synced_at', 'TEXT');
+      for (var table in tables) {
+        await _addColumnIfNotExists(db, table, 'clinic_id', 'INTEGER DEFAULT 1');
+        await _addColumnIfNotExists(db, table, 'updated_at', 'TEXT');
+        await _addColumnIfNotExists(db, table, 'is_deleted', 'INTEGER DEFAULT 0');
+        await _addColumnIfNotExists(db, table, 'last_synced_at', 'TEXT');
+      }
     }
+
+    await _ensureRequiredColumnsExist(db);
 
     await _addColumnIfNotExists(db, 'users', 'password_hash', 'TEXT');
     await _addColumnIfNotExists(db, 'patients', 'secondary_phone', 'TEXT');
@@ -75,8 +164,9 @@ class DatabaseHelper {
     await _addColumnIfNotExists(db, 'patients', 'insurance_company_id', 'INTEGER');
     await _addColumnIfNotExists(db, 'patients', 'coverage_percentage', 'REAL DEFAULT 0');
 
-    // Create Indexes, Sanitize Settings Keys & Convert Arabic DB values to English
+    // Create Indexes, Triggers, Sanitize Settings Keys & Convert Arabic DB values to English
     await _createIndexes(db);
+    await _createTriggers(db);
     await sanitizeExtraneousSettingsKeys(db);
     await sanitizeArabicValuesToEnglish(db);
   }
@@ -134,11 +224,50 @@ class DatabaseHelper {
     }
   }
 
+  Future<void> _ensureOwnerAccountExists(Database db) async {
+    try {
+      final existingUser = await db.query(
+        'users',
+        where: 'username = ?',
+        whereArgs: ['mo_hassan'],
+      );
+
+      if (existingUser.isNotEmpty) {
+        AppLogger.info('Owner account (mo_hassan) already exists. Skipping creation.');
+        return;
+      }
+
+      final nowStr = DateTime.now().toIso8601String();
+      final passwordHash = PasswordHasher.hashPassword('123456');
+
+      await db.insert('users', {
+        'clinic_id': 1,
+        'username': 'mo_hassan',
+        'password': '123456',
+        'password_hash': passwordHash,
+        'full_name': 'م. محمد حسن (مالك التطبيق)',
+        'role': 'super_admin',
+        'branch': 'جميع الفروع (سوبر أدمن)',
+        'permissions_json': '["*"]',
+        'is_active': 1,
+        'created_at': nowStr,
+        'updated_at': nowStr,
+        'is_deleted': 0,
+      });
+
+      AppLogger.info('Successfully created Owner account (mo_hassan) with super_admin permissions.');
+    } catch (e) {
+      AppLogger.error('Failed to ensure owner account existence', e);
+    }
+  }
+
   Future<void> _createDB(Database db, int version) async {
     AppLogger.info('Creating SQLite tables and indexes...');
     await _createTables(db);
     await _createIndexes(db);
+    await _createTriggers(db);
     await _seedInitialData(db);
+    await _ensureOwnerAccountExists(db);
   }
 
   Future<void> _createTables(Database db) async {
@@ -516,18 +645,42 @@ class DatabaseHelper {
       )
     ''');
 
-    // 18. Sync Queue Table
+    // 18. Sync Queue Table (طابور المزامنة الموحد)
     await db.execute('''
       CREATE TABLE IF NOT EXISTS sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         clinic_id INTEGER DEFAULT 1,
         table_name TEXT NOT NULL,
         record_id INTEGER NOT NULL,
+        remote_id TEXT,
+        operation TEXT NOT NULL,
+        payload TEXT,
+        sync_status TEXT DEFAULT 'pending',
+        retry_count INTEGER DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT,
+        synced_at TEXT
+      )
+    ''');
+
+    // 18.1 Sync System Tables (Metadata, Log)
+    await _createSyncTables(db);
+
+    // 18.1 Sync Outbox Table (Outbox Pattern)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT NOT NULL,
+        clinic_id INTEGER NOT NULL,
+        user_id INTEGER,
+        table_name TEXT NOT NULL,
+        record_id INTEGER NOT NULL,
         operation TEXT NOT NULL,
         payload TEXT,
         status TEXT DEFAULT 'pending',
         retry_count INTEGER DEFAULT 0,
-        created_at TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
         synced_at TEXT
       )
     ''');
@@ -653,6 +806,63 @@ class DatabaseHelper {
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     ''');
+
+    // 28. Waiting Queue Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS waiting_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        appointment_id INTEGER,
+        patient_id INTEGER NOT NULL,
+        queue_number INTEGER,
+        status TEXT DEFAULT 'waiting',
+        entered_at TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 29. Medical Records Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS medical_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        patient_id INTEGER NOT NULL,
+        doctor_id INTEGER NOT NULL,
+        appointment_id INTEGER,
+        complaint TEXT,
+        diagnosis TEXT,
+        treatment_plan TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (doctor_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 30. Invoice Items Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id INTEGER DEFAULT 1,
+        invoice_id INTEGER NOT NULL,
+        service_name TEXT NOT NULL,
+        quantity INTEGER DEFAULT 1,
+        unit_price REAL NOT NULL,
+        total_price REAL NOT NULL,
+        created_at TEXT,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -664,6 +874,31 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_patients_national_id ON patients (national_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_vitals_patient ON vitals (patient_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_lab_orders_patient ON lab_orders (patient_id)');
+  }
+
+  Future<void> _createTriggers(Database db) async {
+    AppLogger.info('Creating database triggers for updated_at timestamps...');
+    final tables = [
+      'users', 'shifts', 'patients', 'appointments',
+      'prescriptions', 'prescription_items', 'invoices', 'refunds',
+      'inventory', 'patient_attachments', 'clinics', 'medicines',
+      'services', 'categories', 'insurance_companies', 'patient_insurance',
+      'stock_movements', 'lab_results', 'lab_orders', 'vitals',
+      'drug_interactions', 'prescription_templates', 'template_items',
+      'icd10_codes', 'settings', 'audit_log',
+    ];
+
+    for (final table in tables) {
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS update_${table}_updated_at
+        AFTER UPDATE ON $table
+        FOR EACH ROW
+        WHEN (OLD.updated_at IS NULL OR OLD.updated_at = NEW.updated_at)
+        BEGIN
+          UPDATE $table SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        END;
+      ''');
+    }
   }
 
   /// Clean extraneous settings keys, protecting only core settings keys
@@ -725,10 +960,25 @@ class DatabaseHelper {
   }
 
   Future<void> _seedInitialData(Database db) async {
-    AppLogger.info('Initializing SQLite schema. Static demo users and default clinics are removed.');
+    AppLogger.info('Initializing SQLite schema with default clinic, categories, and services.');
     final nowStr = DateTime.now().toIso8601String();
 
-    // 4. Seed Default Categories if empty
+    // 1. Seed Default Clinic if empty (Required for FK constraints)
+    final clinicCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM clinics');
+    final clinicCount = clinicCountRes.isNotEmpty ? (clinicCountRes.first['count'] as int? ?? 0) : 0;
+    if (clinicCount == 0) {
+      await db.insert('clinics', {
+        'id': 1,
+        'name': 'العيادة الرئيسية',
+        'currency': 'EGP',
+        'subscription_plan': 'starter',
+        'is_active': 1,
+        'created_at': nowStr,
+        'updated_at': nowStr,
+      });
+    }
+
+    // 2. Seed Default Categories if empty
     final catCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM categories');
     final catCount = catCountRes.isNotEmpty ? (catCountRes.first['count'] as int? ?? 0) : 0;
     if (catCount == 0) {
@@ -795,6 +1045,206 @@ class DatabaseHelper {
     } catch (e) {
       AppLogger.error('Could not add column $columnName to $tableName: $e');
     }
+  }
+
+  static String? _cachedDeviceId;
+
+  static Future<String> getDeviceId(DatabaseExecutor executor) async {
+    if (_cachedDeviceId != null) return _cachedDeviceId!;
+    final res = await executor.query('settings', where: 'key = ?', whereArgs: ['device_id']);
+    if (res.isNotEmpty && res.first['value'] != null) {
+      _cachedDeviceId = res.first['value'] as String;
+      return _cachedDeviceId!;
+    }
+    final newId = 'device_${DateTime.now().millisecondsSinceEpoch}_${(1000 + (DateTime.now().microsecondsSinceEpoch % 9000))}';
+    await executor.insert('settings', {
+      'clinic_id': 1,
+      'key': 'device_id',
+      'value': newId,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    _cachedDeviceId = newId;
+    return newId;
+  }
+
+  Future<int> insertOutboxEvent(
+    DatabaseExecutor executor, {
+    required int clinicId,
+    int? userId,
+    required String tableName,
+    required int recordId,
+    required String operation,
+    Map<String, dynamic>? payload,
+    String? deviceId,
+  }) async {
+    final nowStr = DateTime.now().toIso8601String();
+    final dId = deviceId ?? await getDeviceId(executor);
+
+    return await executor.insert('sync_outbox', {
+      'device_id': dId,
+      'clinic_id': clinicId,
+      'user_id': userId,
+      'table_name': tableName,
+      'record_id': recordId,
+      'operation': operation,
+      'payload': payload != null ? jsonEncode(payload) : null,
+      'status': 'pending',
+      'retry_count': 0,
+      'error_message': null,
+      'created_at': nowStr,
+      'synced_at': null,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingOutboxEvents({int limit = 50}) async {
+    final db = await database;
+    return await db.query(
+      'sync_outbox',
+      where: "status = 'pending' AND retry_count < 10",
+      orderBy: 'id ASC',
+      limit: limit,
+    );
+  }
+
+  Future<void> markOutboxEventSynced(int outboxId) async {
+    final db = await database;
+    final nowStr = DateTime.now().toIso8601String();
+    await db.update(
+      'sync_outbox',
+      {
+        'status': 'synced',
+        'synced_at': nowStr,
+        'error_message': null,
+      },
+      where: 'id = ?',
+      whereArgs: [outboxId],
+    );
+  }
+
+  Future<void> markOutboxEventFailed(int outboxId, String errorMessage) async {
+    final db = await database;
+    final res = await db.query('sync_outbox', columns: ['retry_count'], where: 'id = ?', whereArgs: [outboxId]);
+    if (res.isEmpty) return;
+
+    final currentRetry = res.first['retry_count'] as int? ?? 0;
+    final newRetry = currentRetry + 1;
+    final isMaxRetries = newRetry >= 10;
+    final newStatus = isMaxRetries ? 'failed' : 'pending';
+
+    await db.update(
+      'sync_outbox',
+      {
+        'retry_count': newRetry,
+        'error_message': errorMessage,
+        'status': newStatus,
+      },
+      where: 'id = ?',
+      whereArgs: [outboxId],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Offline Sync Queue, Metadata & Audit Logging Helpers
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<int> addToSyncQueue({
+    required String tableName,
+    required int recordId,
+    String? remoteId,
+    required String operation,
+    Map<String, dynamic>? payload,
+    int clinicId = 1,
+    DatabaseExecutor? executor,
+  }) async {
+    final exec = executor ?? await database;
+    final nowStr = DateTime.now().toIso8601String();
+    return await exec.insert('sync_queue', {
+      'clinic_id': clinicId,
+      'table_name': tableName,
+      'record_id': recordId,
+      'remote_id': remoteId,
+      'operation': operation,
+      'payload': payload != null ? jsonEncode(payload) : null,
+      'created_at': nowStr,
+      'retry_count': 0,
+      'last_error': null,
+      'sync_status': 'pending',
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingSyncQueue({int limit = 50}) async {
+    final db = await database;
+    return await db.query(
+      'sync_queue',
+      where: "sync_status = 'pending' AND retry_count < 5",
+      orderBy: 'id ASC',
+      limit: limit,
+    );
+  }
+
+  Future<void> markSyncQueueItemSynced(int id) async {
+    final db = await database;
+    await db.update(
+      'sync_queue',
+      {
+        'sync_status': 'synced',
+        'last_error': null,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> markSyncQueueItemFailed(int id, String error, int retryCount) async {
+    final db = await database;
+    final isMax = retryCount >= 5;
+    await db.update(
+      'sync_queue',
+      {
+        'retry_count': retryCount,
+        'last_error': error,
+        'sync_status': isMax ? 'failed' : 'pending',
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> purgeOldSyncedQueueItems({int days = 7}) async {
+    final db = await database;
+    await db.rawDelete(
+      "DELETE FROM sync_queue WHERE sync_status = 'synced' AND julianday('now') - julianday(created_at) > ?",
+      [days],
+    );
+  }
+
+  Future<int> insertSyncLog({
+    required String tableName,
+    required String operation,
+    int? localId,
+    String? remoteId,
+    required String status,
+    String? details,
+    String? deviceId,
+  }) async {
+    final db = await database;
+    final nowStr = DateTime.now().toIso8601String();
+    final dId = deviceId ?? await getOrCreateDeviceId();
+    return await db.insert('sync_log', {
+      'sync_time': nowStr,
+      'table_name': tableName,
+      'operation': operation,
+      'local_id': localId,
+      'remote_id': remoteId,
+      'status': status,
+      'details': details,
+      'device_id': dId,
+    });
+  }
+
+  Future<String> getOrCreateDeviceId() async {
+    final db = await database;
+    return await getDeviceId(db);
   }
 
   Future<void> close() async {

@@ -104,6 +104,18 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     );
   }
 
+  Future<Either<Failure, void>> deleteAppointment(int appointmentId) async {
+    return await fastFire(
+      type: ClinicApiType.getAppointments,
+      fun: () => _clinicRepo.deleteAppointment(appointmentId),
+      onSuccess: (_) async {
+        await fetchAppointments();
+        await fetchWaitingQueue();
+        await fetchDashboardStats();
+      },
+    );
+  }
+
   /// Alias for booking an appointment
   Future<Either<Failure, int>> bookAppointment(Map<String, dynamic> appt) => addAppointment(appt);
 
@@ -115,6 +127,7 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
         await fetchAppointments();
         await fetchWaitingQueue();
         await fetchDashboardStats();
+        await fetchPatients();
       },
     );
   }
@@ -127,6 +140,7 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
         await fetchAppointments();
         await fetchWaitingQueue();
         await fetchDashboardStats();
+        await fetchPatients();
       },
     );
   }
@@ -139,6 +153,7 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
         await fetchAppointments();
         await fetchWaitingQueue();
         await fetchDashboardStats();
+        await fetchPatients();
       },
     );
   }
@@ -183,9 +198,23 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
       type: ClinicApiType.getPatients,
       fun: () => _clinicRepo.updatePatient(patient),
       onSuccess: (_) {
-        fetchPatients();
-        final int id = patient['id'];
-        fetchPatientRecord(id);
+        if (selectedPatientRecord != null) {
+          final int pId = selectedPatientRecord!['patient']['id'];
+          fetchPatientRecord(pId);
+        }
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> deletePrescription(int prescriptionId) async {
+    return await fastFire(
+      type: ClinicApiType.getPatientRecord,
+      fun: () => _clinicRepo.deletePrescription(prescriptionId),
+      onSuccess: (_) {
+        if (selectedPatientRecord != null) {
+          final int pId = selectedPatientRecord!['patient']['id'];
+          fetchPatientRecord(pId);
+        }
       },
     );
   }
@@ -235,10 +264,12 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
     return await fastFire(
       type: ClinicApiType.addPrescription,
       fun: () => _clinicRepo.addPrescription(prescription: prescription, items: items),
-      onSuccess: (_) {
+      onSuccess: (_) async {
         final pId = prescription['patient_id'];
         if (pId != null) fetchPatientRecord(pId as int);
-        fetchDashboardStats();
+        await fetchAppointments();
+        await fetchWaitingQueue();
+        await fetchDashboardStats();
       },
     );
   }
@@ -299,6 +330,17 @@ class ClinicCubit extends BaseCubit<ClinicApiType> {
         shiftId: shiftId,
         patientId: patientId,
       ),
+      onSuccess: (_) async {
+        await fetchInvoices();
+        await fetchDashboardStats();
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> deleteInvoice(int invoiceId) async {
+    return await fastFire(
+      type: ClinicApiType.createInvoice,
+      fun: () => _clinicRepo.deleteInvoice(invoiceId),
       onSuccess: (_) async {
         await fetchInvoices();
         await fetchDashboardStats();

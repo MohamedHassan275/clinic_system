@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/database/database_helper.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/enums/user_role.dart';
 import '../../../../core/responsive/responsive_layout.dart';
@@ -91,6 +93,37 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
     );
   }
 
+  Future<void> _showExitAppDialog() async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.exit_to_app, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('الخروج من التطبيق'),
+          ],
+        ),
+        content: const Text('هل تريد الخروج من التطبيق بالكامل؟ (سيظل حسابك متصلاً عند العودة)'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              SystemNavigator.pop();
+            },
+            child: const Text('خروج', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _confirmLogout() {
     showDialog(
       context: context,
@@ -100,10 +133,10 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
           children: [
             Icon(Icons.logout, color: AppColors.error),
             SizedBox(width: 8),
-            Text('تأكيد تسجيل الخروج'),
+            Text('تسجيل الخروج من التطبيق'),
           ],
         ),
-        content: const Text('هل أنت تأكد من رغبتك في تسجيل الخروج من نظام العيادة؟'),
+        content: const Text('هل أنت تأكد من رغبتك في تسجيل الخروج وإلغاء الوردية الحالية والجلسة؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
@@ -111,12 +144,28 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
-              SessionManager.instance.clearSession();
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
+              final activeShift = SessionManager.instance.activeShift;
+              if (activeShift != null && activeShift['id'] != null) {
+                try {
+                  final db = await DatabaseHelper.instance.database;
+                  final nowStr = DateTime.now().toIso8601String();
+                  await db.update(
+                    'shifts',
+                    {'end_time': nowStr, 'is_closed': 1},
+                    where: 'id = ?',
+                    whereArgs: [activeShift['id']],
+                  );
+                } catch (_) {}
+              }
+              SessionManager.instance.setActiveShift(null);
+              await SessionManager.instance.clearSession();
+              if (mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+              }
             },
             child: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white)),
           ),
@@ -140,8 +189,14 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
               ? allowedItems[validIndex].key
               : 'dashboard';
 
-          return Directionality(
-            textDirection: TextDirection.rtl,
+          return PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, result) async {
+              if (didPop) return;
+              await _showExitAppDialog();
+            },
+            child: Directionality(
+              textDirection: TextDirection.rtl,
             child: ResponsiveLayout(
               // Mobile Layout (< 600px)
               mobile: Scaffold(
@@ -198,8 +253,9 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                 ),
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
       ),
     );
   }

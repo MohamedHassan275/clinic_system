@@ -423,14 +423,14 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
               label: '💰 تحصيل فاتورة / الحسابات',
               icon: Icons.receipt_long_rounded,
               color: Colors.teal,
-              onPressed: () => sl<MainShellViewModel>().selectTabByKey('billing'),
+              onPressed: () => _onQuickBilling(),
             ),
             const SizedBox(height: 10),
             _buildActionButton(
               label: '👤 البحث في ملفات المرضى',
               icon: Icons.folder_shared_rounded,
               color: Colors.blueGrey,
-              onPressed: () => sl<MainShellViewModel>().selectTabByKey('emr'),
+              onPressed: () => _onQuickPatientSearch(),
             ),
           ],
         ),
@@ -467,7 +467,7 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
             label: isMobile ? '💰 تحصيل' : '💰 الحسابات',
             icon: Icons.receipt_long_rounded,
             color: Colors.teal,
-            onPressed: () => sl<MainShellViewModel>().selectTabByKey('billing'),
+            onPressed: () => _onQuickBilling(),
           ),
         ),
         SizedBox(
@@ -476,7 +476,7 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
             label: isMobile ? '👤 ملفات' : '👤 ملفات المرضى',
             icon: Icons.folder_shared_rounded,
             color: Colors.blueGrey,
-            onPressed: () => sl<MainShellViewModel>().selectTabByKey('emr'),
+            onPressed: () => _onQuickPatientSearch(),
           ),
         ),
       ],
@@ -780,6 +780,266 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _onQuickBilling() {
+    final patients = _viewModel.clinicCubit.patients;
+    final user = SessionManager.instance.currentUser;
+    final shift = SessionManager.instance.activeShift;
+
+    int? selectedPatientId = patients.isNotEmpty ? (patients.first['id'] as int?) : null;
+    double amount = 200.0;
+    double discount = 0.0;
+    String paymentMethod = 'cash';
+    final amountController = TextEditingController(text: '200');
+    final discountController = TextEditingController(text: '0');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AppDialog(
+          title: 'تحصيل فاتورة / الحسابات السريعة',
+          subtitle: 'تحصيل مبلغ وكشف سريع للمريض دون مغادرة شاشة الاستقبال',
+          icon: Icons.receipt_long_rounded,
+          iconColor: Colors.teal,
+          maxWidth: 500,
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: selectedPatientId,
+                decoration: const InputDecoration(labelText: 'اختر المريض *'),
+                items: patients.map((p) {
+                  return DropdownMenuItem<int>(
+                    value: p['id'] as int,
+                    child: Text('${p['name']} (${p['phone'] ?? ''})'),
+                  );
+                }).toList(),
+                onChanged: (val) => setModalState(() => selectedPatientId = val),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'المبلغ الإجمالي *', suffixText: 'ج.م'),
+                      onChanged: (v) => amount = double.tryParse(v) ?? 200.0,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: discountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'الخصم', suffixText: 'ج.م'),
+                      onChanged: (v) => discount = double.tryParse(v) ?? 0.0,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: paymentMethod,
+                decoration: const InputDecoration(labelText: 'طريقة الدفع *'),
+                items: const [
+                  DropdownMenuItem(value: 'cash', child: Text('نقدي (كاش)')),
+                  DropdownMenuItem(value: 'card', child: Text('بطاقة (فيزا / كارت)')),
+                  DropdownMenuItem(value: 'transfer', child: Text('تحويل بنكي')),
+                ],
+                onChanged: (val) => setModalState(() => paymentMethod = val!),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(dialogCtx).pop();
+                  sl<MainShellViewModel>().selectTabByKey('billing');
+                },
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('فتح سجل الحسابات والفواتير الشامل'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('إلغاء', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+              onPressed: () async {
+                if (selectedPatientId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('اختر المريض أولاً'), backgroundColor: AppColors.error),
+                  );
+                  return;
+                }
+                if (user == null || shift == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('يجب فتح وردية أولاً للتحصيل'), backgroundColor: AppColors.error),
+                  );
+                  return;
+                }
+
+                final total = amount;
+                final disc = discount;
+                final paid = (total - disc).clamp(0.0, double.infinity);
+                final nowStr = DateTime.now().toIso8601String().substring(0, 16).replaceAll('T', ' ');
+
+                final invoiceData = {
+                  'clinic_id': user['clinic_id'] ?? 1,
+                  'patient_id': selectedPatientId,
+                  'user_id': user['id'],
+                  'shift_id': shift['id'],
+                  'total_amount': total,
+                  'discount': disc,
+                  'paid_amount': paid,
+                  'cash_amount': paymentMethod == 'cash' ? paid : 0.0,
+                  'card_amount': paymentMethod == 'card' ? paid : 0.0,
+                  'payment_method': paymentMethod,
+                  'status': 'paid',
+                  'created_at': nowStr,
+                };
+
+                final res = await _viewModel.clinicCubit.createInvoice(invoiceData);
+                res.fold(
+                  (err) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('فشل تحصيل الفاتورة: ${err.message}'), backgroundColor: AppColors.error),
+                      );
+                    }
+                  },
+                  (_) {
+                    if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم تحصيل وتسجيل الفاتورة بنجاح!'), backgroundColor: AppColors.success),
+                      );
+                    }
+                  },
+                );
+              },
+              child: const Text('تأكيد التحصيل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _onQuickPatientSearch() {
+    String searchQuery = '';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final allPatients = _viewModel.clinicCubit.patients;
+          final filtered = searchQuery.trim().isEmpty
+              ? allPatients
+              : allPatients.where((p) {
+                  final q = searchQuery.trim().toLowerCase();
+                  final name = (p['name'] ?? '').toString().toLowerCase();
+                  final phone = (p['phone'] ?? '').toString().toLowerCase();
+                  final nid = (p['national_id'] ?? '').toString().toLowerCase();
+                  final ins = (p['insurance_entity_name'] ?? '').toString().toLowerCase();
+                  return name.contains(q) || phone.contains(q) || nid.contains(q) || ins.contains(q);
+                }).toList();
+
+          return AppDialog(
+            title: 'البحث في ملفات المرضى',
+            subtitle: 'ابحث عن بيانات ومواعيد المريض باسمه أو هاتفه أو الرقم القومي',
+            icon: Icons.folder_shared_rounded,
+            iconColor: Colors.blueGrey,
+            maxWidth: 580,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'بحث بالاسم، الهاتف، أو الرقم القومي...',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (val) => setModalState(() => searchQuery = val),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 320,
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Text('لا توجد نتائج مطابقة للبحث', style: TextStyle(color: AppColors.textSecondary)),
+                        )
+                      : ListView.separated(
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, idx) {
+                            final p = filtered[idx];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              leading: const CircleAvatar(
+                                backgroundColor: AppColors.primary,
+                                child: Icon(Icons.person, color: Colors.white, size: 20),
+                              ),
+                              title: Text(
+                                p['name'] ?? 'بدون اسم',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                              subtitle: Text(
+                                'موبايل: ${p['phone'] ?? '-'} | السن: ${p['age'] ?? '-'} | العقد: ${p['contract_entity'] ?? 'نقدي'}',
+                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'حجز موعد جديد',
+                                    icon: const Icon(Icons.add_alarm_rounded, color: AppColors.secondary),
+                                    onPressed: () {
+                                      Navigator.of(dialogCtx).pop();
+                                      _onBookAppointment();
+                                    },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'فتح الملف الطبي الكامل',
+                                    icon: const Icon(Icons.folder_open_rounded, color: AppColors.primary),
+                                    onPressed: () {
+                                      Navigator.of(dialogCtx).pop();
+                                      sl<MainShellViewModel>().selectTabByKey('emr');
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('إغلاق', style: TextStyle(color: AppColors.textSecondary)),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                onPressed: () {
+                  Navigator.of(dialogCtx).pop();
+                  sl<MainShellViewModel>().selectTabByKey('emr');
+                },
+                icon: const Icon(Icons.folder_shared_rounded, color: Colors.white, size: 16),
+                label: const Text('سجل المرضى (EMR)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

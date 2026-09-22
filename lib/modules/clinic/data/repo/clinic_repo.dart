@@ -16,6 +16,7 @@ abstract class ClinicRepo {
   Future<Either<Failure, void>> updateAppointmentStatus(int id, String status);
   Future<Either<Failure, void>> updateAppointment(Map<String, dynamic> appointment);
   Future<Either<Failure, void>> rescheduleAppointment(int id, String newDate, String newTimeSlot);
+  Future<Either<Failure, void>> deleteAppointment(int appointmentId);
 
   // Waiting Room
   Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingRoomQueue({int clinicId = 1, String? date});
@@ -32,6 +33,7 @@ abstract class ClinicRepo {
     required Map<String, dynamic> prescription,
     required List<Map<String, dynamic>> items,
   });
+  Future<Either<Failure, void>> deletePrescription(int prescriptionId);
 
   // Invoices & Billing
   Future<Either<Failure, List<Map<String, dynamic>>>> getInvoices();
@@ -44,6 +46,7 @@ abstract class ClinicRepo {
     required int shiftId,
     required int patientId,
   });
+  Future<Either<Failure, void>> deleteInvoice(int invoiceId);
 
   // Inventory
   Future<Either<Failure, List<Map<String, dynamic>>>> getInventory();
@@ -103,7 +106,7 @@ class ClinicRepoImpl implements ClinicRepo {
 
       // Today's Revenue
       final revRes = await db.rawQuery(
-        'SELECT SUM(paid_amount) as total FROM invoices WHERE clinic_id = ? AND date(created_at) = date(?) AND status != "refunded"',
+        "SELECT SUM(paid_amount) as total FROM invoices WHERE clinic_id = ? AND date(created_at) = date(?) AND status != 'refunded'",
         [clinicId, todayStr],
       );
       final double todayRevenue = (revRes.first['total'] as num?)?.toDouble() ?? 0.0;
@@ -128,10 +131,11 @@ class ClinicRepoImpl implements ClinicRepo {
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
         JOIN users u ON a.user_id = u.id
+        WHERE COALESCE(a.is_deleted, 0) = 0
       ''';
       List<dynamic> args = [];
       if (date != null && date.isNotEmpty) {
-        query += ' WHERE date(a.appointment_date) = date(?)';
+        query += ' AND date(a.appointment_date) = date(?)';
         args.add(date);
       }
       query += ' ORDER BY a.id DESC';
@@ -198,6 +202,26 @@ class ClinicRepoImpl implements ClinicRepo {
   }
 
   @override
+  Future<Either<Failure, void>> deleteAppointment(int appointmentId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final nowStr = DateTime.now().toIso8601String();
+      await db.update(
+        'appointments',
+        {
+          'is_deleted': 1,
+          'updated_at': nowStr,
+        },
+        where: 'id = ?',
+        whereArgs: [appointmentId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل حذف الموعد: $e'));
+    }
+  }
+
+  @override
   Future<Either<Failure, List<Map<String, dynamic>>>> getWaitingRoomQueue({int clinicId = 1, String? date}) async {
     try {
       final db = await DatabaseHelper.instance.database;
@@ -207,6 +231,7 @@ class ClinicRepoImpl implements ClinicRepo {
         FROM appointments a
         JOIN patients p ON a.patient_id = p.id
         WHERE a.clinic_id = ?
+          AND COALESCE(a.is_deleted, 0) = 0
           AND date(a.appointment_date) = date(?)
           AND LOWER(a.status) IN ('waiting', 'in_progress')
         ORDER BY CASE LOWER(a.priority)
@@ -226,10 +251,10 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, List<Map<String, dynamic>>>> getPatients({String? query}) async {
     try {
       final db = await DatabaseHelper.instance.database;
-      String sql = 'SELECT * FROM patients';
+      String sql = 'SELECT * FROM patients WHERE COALESCE(is_deleted, 0) = 0';
       List<dynamic> args = [];
       if (query != null && query.isNotEmpty) {
-        sql += ' WHERE name LIKE ? OR phone LIKE ? OR national_id LIKE ? OR contract_entity LIKE ?';
+        sql += ' AND (name LIKE ? OR phone LIKE ? OR national_id LIKE ? OR contract_entity LIKE ?)';
         args = ['%$query%', '%$query%', '%$query%', '%$query%'];
       }
       sql += ' ORDER BY id DESC';
@@ -267,7 +292,16 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, void>> deletePatient(int patientId) async {
     try {
       final db = await DatabaseHelper.instance.database;
-      await db.delete('patients', where: 'id = ?', whereArgs: [patientId]);
+      final nowStr = DateTime.now().toIso8601String();
+      await db.update(
+        'patients',
+        {
+          'is_deleted': 1,
+          'updated_at': nowStr,
+        },
+        where: 'id = ?',
+        whereArgs: [patientId],
+      );
       return const Right(null);
     } catch (e) {
       return Left(Failure(500, 'فشل حذف سجل المريض: $e'));
@@ -280,14 +314,22 @@ class ClinicRepoImpl implements ClinicRepo {
       final db = await DatabaseHelper.instance.database;
       final pat = await db.query('patients', where: 'id = ?', whereArgs: [patientId]);
       final appts = await db.query('appointments', where: 'patient_id = ?', whereArgs: [patientId]);
-      final prescs = await db.query('prescriptions', where: 'patient_id = ?', whereArgs: [patientId]);
+      final prescs = await db.query('prescriptions', where: 'patient_id = ?', whereArgs: [patientId], orderBy: 'id DESC');
+      final prescsWithItems = <Map<String, dynamic>>[];
+      for (final p in prescs) {
+        final items = await db.query('prescription_items', where: 'prescription_id = ?', whereArgs: [p['id']]);
+        prescsWithItems.add({
+          ...p,
+          'items': items,
+        });
+      }
       final labs = await db.query('lab_results', where: 'patient_id = ?', whereArgs: [patientId], orderBy: 'id DESC');
       final attach = await db.query('patient_attachments', where: 'patient_id = ?', whereArgs: [patientId], orderBy: 'id DESC');
 
       return Right({
         'patient': pat.isNotEmpty ? pat.first : null,
         'appointments': appts,
-        'prescriptions': prescs,
+        'prescriptions': prescsWithItems,
         'lab_results': labs,
         'attachments': attach,
       });
@@ -320,6 +362,26 @@ class ClinicRepoImpl implements ClinicRepo {
   }
 
   @override
+  Future<Either<Failure, void>> deletePrescription(int prescriptionId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final nowStr = DateTime.now().toIso8601String();
+      await db.update(
+        'prescriptions',
+        {
+          'is_deleted': 1,
+          'updated_at': nowStr,
+        },
+        where: 'id = ?',
+        whereArgs: [prescriptionId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل حذف الروشتة: $e'));
+    }
+  }
+
+  @override
   Future<Either<Failure, List<Map<String, dynamic>>>> getInvoices() async {
     try {
       final db = await DatabaseHelper.instance.database;
@@ -329,6 +391,7 @@ class ClinicRepoImpl implements ClinicRepo {
         FROM invoices i
         JOIN patients p ON i.patient_id = p.id
         JOIN users u ON i.user_id = u.id
+        WHERE COALESCE(i.is_deleted, 0) = 0
         ORDER BY i.id DESC
       ''');
       return Right(res);
@@ -394,10 +457,30 @@ class ClinicRepoImpl implements ClinicRepo {
   }
 
   @override
+  Future<Either<Failure, void>> deleteInvoice(int invoiceId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final nowStr = DateTime.now().toIso8601String();
+      await db.update(
+        'invoices',
+        {
+          'is_deleted': 1,
+          'updated_at': nowStr,
+        },
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(Failure(500, 'فشل حذف الفاتورة: $e'));
+    }
+  }
+
+  @override
   Future<Either<Failure, List<Map<String, dynamic>>>> getInventory() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final res = await db.query('inventory', orderBy: 'id DESC');
+      final res = await db.query('inventory', where: 'COALESCE(is_deleted, 0) = 0', orderBy: 'id DESC');
       return Right(res);
     } catch (e) {
       return Left(Failure(500, 'فشل جلب مستلزمات المخزن: $e'));
@@ -436,20 +519,29 @@ class ClinicRepoImpl implements ClinicRepo {
           COALESCE(SUM(paid_amount), 0.0) as grossRevenue,
           COALESCE(SUM(cash_amount), 0.0) as cashRevenue,
           COALESCE(SUM(card_amount), 0.0) as cardRevenue
-        FROM invoices WHERE clinic_id = ? AND status != 'refunded'
+        FROM invoices WHERE clinic_id = ? AND status != 'refunded' AND COALESCE(is_deleted, 0) = 0
       ''', [clinicId]);
 
-      final refRes = await db.rawQuery('SELECT COALESCE(SUM(refund_amount), 0.0) as totalRefunds FROM refunds WHERE clinic_id = ?', [clinicId]);
+      List<Map<String, dynamic>> refRes = [];
+      try {
+        refRes = await db.rawQuery('SELECT COALESCE(SUM(refund_amount), 0.0) as totalRefunds FROM refunds WHERE clinic_id = ?', [clinicId]);
+      } catch (_) {
+        try {
+          refRes = await db.rawQuery('SELECT COALESCE(SUM(r.refund_amount), 0.0) as totalRefunds FROM refunds r INNER JOIN invoices i ON r.invoice_id = i.id WHERE i.clinic_id = ?', [clinicId]);
+        } catch (_) {
+          refRes = [{'totalRefunds': 0.0}];
+        }
+      }
 
-      final apptRes = await db.rawQuery('SELECT COUNT(*) as totalAppts FROM appointments WHERE clinic_id = ?', [clinicId]);
-      final completedApptRes = await db.rawQuery("SELECT COUNT(*) as completedAppts FROM appointments WHERE clinic_id = ? AND status = 'completed'", [clinicId]);
-      final cancelledApptRes = await db.rawQuery("SELECT COUNT(*) as cancelledAppts FROM appointments WHERE clinic_id = ? AND status = 'cancelled'", [clinicId]);
+      final apptRes = await db.rawQuery('SELECT COUNT(*) as totalAppts FROM appointments WHERE clinic_id = ? AND COALESCE(is_deleted, 0) = 0', [clinicId]);
+      final completedApptRes = await db.rawQuery("SELECT COUNT(*) as completedAppts FROM appointments WHERE clinic_id = ? AND status = 'completed' AND COALESCE(is_deleted, 0) = 0", [clinicId]);
+      final cancelledApptRes = await db.rawQuery("SELECT COUNT(*) as cancelledAppts FROM appointments WHERE clinic_id = ? AND status = 'cancelled' AND COALESCE(is_deleted, 0) = 0", [clinicId]);
 
-      final patRes = await db.rawQuery('SELECT COUNT(*) as totalPatients FROM patients');
-      final lowStockRes = await db.rawQuery('SELECT COUNT(*) as lowStock FROM inventory WHERE quantity <= min_threshold');
+      final patRes = await db.rawQuery('SELECT COUNT(*) as totalPatients FROM patients WHERE clinic_id = ? AND COALESCE(is_deleted, 0) = 0', [clinicId]);
+      final lowStockRes = await db.rawQuery('SELECT COUNT(*) as lowStock FROM inventory WHERE clinic_id = ? AND quantity <= min_threshold AND COALESCE(is_deleted, 0) = 0', [clinicId]);
 
-      final grossRev = (revRes.first['grossRevenue'] as num?)?.toDouble() ?? 0.0;
-      final totalRefunds = (refRes.first['totalRefunds'] as num?)?.toDouble() ?? 0.0;
+      final grossRev = (revRes.isNotEmpty ? (revRes.first['grossRevenue'] as num?)?.toDouble() : 0.0) ?? 0.0;
+      final totalRefunds = (refRes.isNotEmpty ? (refRes.first['totalRefunds'] as num?)?.toDouble() : 0.0) ?? 0.0;
       final netRev = grossRev - totalRefunds;
 
       return Right({
@@ -457,8 +549,8 @@ class ClinicRepoImpl implements ClinicRepo {
         'totalRefunds': totalRefunds,
         'totalRevenue': netRev,
         'netRevenue': netRev,
-        'cashRevenue': (revRes.first['cashRevenue'] as num?)?.toDouble() ?? 0.0,
-        'cardRevenue': (revRes.first['cardRevenue'] as num?)?.toDouble() ?? 0.0,
+        'cashRevenue': (revRes.isNotEmpty ? (revRes.first['cashRevenue'] as num?)?.toDouble() : 0.0) ?? 0.0,
+        'cardRevenue': (revRes.isNotEmpty ? (revRes.first['cardRevenue'] as num?)?.toDouble() : 0.0) ?? 0.0,
         'totalAppointments': Sqflite.firstIntValue(apptRes) ?? 0,
         'completedAppointments': Sqflite.firstIntValue(completedApptRes) ?? 0,
         'cancelledAppointments': Sqflite.firstIntValue(cancelledApptRes) ?? 0,
@@ -474,7 +566,7 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, List<Map<String, dynamic>>>> getUsers() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final res = await db.query('users', orderBy: 'id ASC');
+      final res = await db.query('users', where: 'COALESCE(is_deleted, 0) = 0', orderBy: 'id ASC');
       return Right(res);
     } catch (e) {
       return Left(Failure(500, 'فشل جلب المستخدمين: $e'));
@@ -520,7 +612,16 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, void>> deleteInventoryItem(int id) async {
     try {
       final db = await DatabaseHelper.instance.database;
-      await db.delete('inventory', where: 'id = ?', whereArgs: [id]);
+      final nowStr = DateTime.now().toIso8601String();
+      await db.update(
+        'inventory',
+        {
+          'is_deleted': 1,
+          'updated_at': nowStr,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
       return const Right(null);
     } catch (e) {
       return Left(Failure(500, 'فشل حذف صنف المخزن: $e'));
@@ -553,7 +654,16 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, void>> deleteUser(int userId) async {
     try {
       final db = await DatabaseHelper.instance.database;
-      await db.delete('users', where: 'id = ?', whereArgs: [userId]);
+      final nowStr = DateTime.now().toIso8601String();
+      await db.update(
+        'users',
+        {
+          'is_deleted': 1,
+          'updated_at': nowStr,
+        },
+        where: 'id = ?',
+        whereArgs: [userId],
+      );
       return const Right(null);
     } catch (e) {
       return Left(Failure(500, 'فشل حذف حساب المستخدم: $e'));
@@ -588,8 +698,8 @@ class ClinicRepoImpl implements ClinicRepo {
     try {
       final db = await DatabaseHelper.instance.database;
       final res = type != null
-          ? await db.query('categories', where: 'type = ? AND is_active = 1', whereArgs: [type])
-          : await db.query('categories', where: 'is_active = 1');
+          ? await db.query('categories', where: 'type = ? AND is_active = 1 AND COALESCE(is_deleted, 0) = 0', whereArgs: [type])
+          : await db.query('categories', where: 'is_active = 1 AND COALESCE(is_deleted, 0) = 0');
       return Right(res);
     } catch (e) {
       return Left(Failure(500, 'فشل جلب التصنيفات: $e'));
@@ -611,7 +721,7 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, List<Map<String, dynamic>>>> getServices() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final res = await db.query('services', where: 'is_active = 1');
+      final res = await db.query('services', where: 'is_active = 1 AND COALESCE(is_deleted, 0) = 0');
       return Right(res);
     } catch (e) {
       return Left(Failure(500, 'فشل جلب خدمات العيادة: $e'));
@@ -633,7 +743,7 @@ class ClinicRepoImpl implements ClinicRepo {
   Future<Either<Failure, List<Map<String, dynamic>>>> getInsuranceCompanies() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final res = await db.query('insurance_companies', where: 'is_active = 1');
+      final res = await db.query('insurance_companies', where: 'is_active = 1 AND COALESCE(is_deleted, 0) = 0');
       return Right(res);
     } catch (e) {
       return Left(Failure(500, 'فشل جلب شركات التأمين: $e'));

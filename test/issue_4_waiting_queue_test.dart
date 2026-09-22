@@ -91,6 +91,11 @@ class FakeWaitingQueueRepo extends Fake implements ClinicRepo {
   }
 
   @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> getPatients({String? query}) async {
+    return const Right([]);
+  }
+
+  @override
   Future<Either<Failure, Map<String, dynamic>>> getDashboardStats({int clinicId = 1}) async {
     return Right({
       'todayAppointments': mockAppointments.length,

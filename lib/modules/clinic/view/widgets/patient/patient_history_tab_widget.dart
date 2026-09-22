@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/enums/appointment_enums.dart';
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/utils/date_formatter.dart';
 
 class PatientHistoryTabWidget extends StatelessWidget {
   final Map<String, dynamic>? selectedPatientRecord;
@@ -146,7 +147,7 @@ class PatientHistoryTabWidget extends StatelessWidget {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'التاريخ: ${item['date']} ${item['time'].toString().isNotEmpty ? '(${item['time']})' : ''} | المعالج: د. ${item['doctor']}',
+                                        'التاريخ: ${DateFormatter.formatDate(item['date'])} ${item['time'].toString().isNotEmpty ? '(${item['time']})' : ''} | المعالج: د. ${item['doctor']}',
                                         style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                       ),
                                       if (item['notes'] != null && (item['notes'] as String).isNotEmpty) ...[

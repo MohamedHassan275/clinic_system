@@ -35,11 +35,7 @@ class SplashViewModel extends BaseViewModel {
     }
 
     if (SessionManager.instance.isLoggedIn) {
-      if (SessionManager.instance.hasActiveShift) {
-        onGoToMainShell();
-      } else {
-        onGoToShift();
-      }
+      onGoToMainShell();
     } else {
       onGoToLogin();
     }

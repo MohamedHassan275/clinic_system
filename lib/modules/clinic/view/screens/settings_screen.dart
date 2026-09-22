@@ -4,6 +4,7 @@ import '../../../../core/common/widgets/app_dialog.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../auth/view/screens/supabase_auth_test_screen.dart';
 import '../../../shared/cubit/block_builder_widget.dart';
 import '../../data/cubit/clinic_cubit.dart';
 import '../clinic_view_model.dart';
@@ -61,15 +62,30 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     Text('التحكم في بيانات العيادة الأساسية وإدارة حسابات وصلاحيات الأطباء والموظفين', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                   ],
                 ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () => _showAddOrEditUserDialog(context),
-                  icon: const Icon(Icons.person_add_alt_1, color: Colors.white, size: 18),
-                  label: const Text('إضافة حساب جديد +', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    // زر اختبار الاتصال السحابي (Supabase Auth)
+                    IconButton(
+                      icon: const Icon(Icons.cloud_sync_rounded, color: AppColors.primary),
+                      tooltip: 'اختبار الاتصال بالسحاب Supabase',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const SupabaseAuthTestScreen()),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => _showAddOrEditUserDialog(context),
+                      icon: const Icon(Icons.person_add_alt_1, color: Colors.white, size: 18),
+                      label: const Text('إضافة حساب جديد +', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
                 ),
               ],
             ),

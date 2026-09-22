@@ -75,8 +75,8 @@ void main() {
         'remember_me': false,
       };
 
-      // Set user session directly without overwriting last_activity_timestamp
-      sessionManager.setUserSession(expiredUser);
+      // Set user session directly with rememberMe: false
+      sessionManager.setUserSession(expiredUser, rememberMe: false);
       // Explicitly set past activity timestamp
       sessionManager.currentUser?['last_activity_timestamp'] = DateTime.now().subtract(const Duration(minutes: 35)).toIso8601String();
 

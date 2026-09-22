@@ -120,7 +120,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
-                        height: 48,
+                        height: 55,
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
@@ -273,7 +273,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
 
     return SizedBox(
       width: double.infinity,
-      height: 48,
+      height: 55,
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
