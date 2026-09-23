@@ -137,16 +137,25 @@ class SyncService {
 
   // 5. Connectivity Listener & Exponential Backoff
   void _startConnectivityListener() {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
-      final isConnected = !results.contains(ConnectivityResult.none);
-      if (!isConnected) {
-        _setStatus(SyncStatus.offline);
-        return;
-      }
-      if (_isSyncEnabled) {
-        syncAll();
-      }
-    });
+    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux) {
+      return;
+    }
+    try {
+      _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+        final isConnected = !results.contains(ConnectivityResult.none);
+        if (!isConnected) {
+          _setStatus(SyncStatus.offline);
+          return;
+        }
+        if (_isSyncEnabled) {
+          syncAll();
+        }
+      }, onError: (e) {
+        debugPrint('[SyncService] Connectivity listener error ignored: $e');
+      });
+    } catch (e) {
+      debugPrint('[SyncService] Connectivity listener error: $e');
+    }
   }
 
   void _startPeriodicTimer() {
