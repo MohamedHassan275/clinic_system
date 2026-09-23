@@ -8,6 +8,7 @@ import '../../../auth/view/screens/supabase_auth_test_screen.dart';
 import '../../../shared/cubit/block_builder_widget.dart';
 import '../../data/cubit/clinic_cubit.dart';
 import '../clinic_view_model.dart';
+import 'sync_status_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -64,9 +65,20 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                 ),
                 Row(
                   children: [
-                    // زر اختبار الاتصال السحابي (Supabase Auth)
+                    // زر شاشة مراقبة المزامنة السحابية (Sync Status Screen)
                     IconButton(
                       icon: const Icon(Icons.cloud_sync_rounded, color: AppColors.primary),
+                      tooltip: 'مراقبة حالة المزامنة السحابية',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const SyncStatusScreen()),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    // زر اختبار الاتصال السحابي (Supabase Auth)
+                    IconButton(
+                      icon: const Icon(Icons.cloud_done_outlined, color: AppColors.secondary),
                       tooltip: 'اختبار الاتصال بالسحاب Supabase',
                       onPressed: () {
                         Navigator.of(context).push(

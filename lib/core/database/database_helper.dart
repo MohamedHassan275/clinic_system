@@ -1280,15 +1280,65 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> getPendingSyncQueueCount() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT COUNT(*) as cnt FROM sync_queue WHERE sync_status = 'pending'");
+    if (res.isEmpty) return 0;
+    return (res.first['cnt'] as int?) ?? 0;
+  }
+
+  Future<int> getFailedSyncQueueCount() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT COUNT(*) as cnt FROM sync_queue WHERE sync_status = 'failed' OR retry_count >= 5");
+    if (res.isEmpty) return 0;
+    return (res.first['cnt'] as int?) ?? 0;
+  }
+
+  Future<int> getSuccessfulSyncLogsCount() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT COUNT(*) as cnt FROM sync_log WHERE status = 'success'");
+    if (res.isEmpty) return 0;
+    return (res.first['cnt'] as int?) ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentSyncLogs({int limit = 50}) async {
+    final db = await database;
+    return await db.query(
+      'sync_log',
+      orderBy: 'sync_time DESC, id DESC',
+      limit: limit,
+    );
+  }
+
+  Future<int> retryFailedSyncQueueItems() async {
+    final db = await database;
+    return await db.update(
+      'sync_queue',
+      {
+        'retry_count': 0,
+        'sync_status': 'pending',
+        'last_error': null,
+      },
+      where: "sync_status = 'failed' OR retry_count >= 5",
+    );
+  }
+
   Future<void> updateRecordRemoteId(String tableName, int localId, String remoteId) async {
     final db = await database;
     try {
       final info = await db.rawQuery("PRAGMA table_info($tableName)");
       final hasRemoteId = info.any((col) => col['name'] == 'remote_id');
       if (hasRemoteId) {
+        final Map<String, dynamic> updateValues = {'remote_id': remoteId};
+        if (info.any((col) => col['name'] == 'sync_status')) {
+          updateValues['sync_status'] = 'synced';
+        }
+        if (info.any((col) => col['name'] == 'updated_at')) {
+          updateValues['updated_at'] = DateTime.now().toUtc().toIso8601String();
+        }
         await db.update(
           tableName,
-          {'remote_id': remoteId},
+          updateValues,
           where: 'id = ?',
           whereArgs: [localId],
         );

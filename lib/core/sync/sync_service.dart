@@ -12,6 +12,52 @@ import '../services/supabase_service.dart';
 
 enum SyncStatus { offline, connected, syncing, error }
 
+/// Represents real-time data migration progress details
+class MigrationProgress {
+  final String currentTable;
+  final int processedRows;
+  final int totalRows;
+  final double percentage; // 0.0 to 1.0
+  final bool isCompleted;
+  final bool isMigrating;
+
+  const MigrationProgress({
+    required this.currentTable,
+    required this.processedRows,
+    required this.totalRows,
+    required this.percentage,
+    required this.isCompleted,
+    required this.isMigrating,
+  });
+
+  factory MigrationProgress.initial() => const MigrationProgress(
+        currentTable: '',
+        processedRows: 0,
+        totalRows: 0,
+        percentage: 0.0,
+        isCompleted: false,
+        isMigrating: false,
+      );
+
+  MigrationProgress copyWith({
+    String? currentTable,
+    int? processedRows,
+    int? totalRows,
+    double? percentage,
+    bool? isCompleted,
+    bool? isMigrating,
+  }) {
+    return MigrationProgress(
+      currentTable: currentTable ?? this.currentTable,
+      processedRows: processedRows ?? this.processedRows,
+      totalRows: totalRows ?? this.totalRows,
+      percentage: percentage ?? this.percentage,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isMigrating: isMigrating ?? this.isMigrating,
+    );
+  }
+}
+
 /// Outbox Pattern & Delta Sync Engine between local SQLite and cloud Supabase
 class SyncService {
   static final SyncService instance = SyncService._init();
@@ -37,6 +83,8 @@ class SyncService {
   bool get isSyncing => _isSyncing;
 
   final ValueNotifier<SyncStatus> statusNotifier = ValueNotifier<SyncStatus>(SyncStatus.offline);
+  final ValueNotifier<MigrationProgress> migrationProgressNotifier =
+      ValueNotifier<MigrationProgress>(MigrationProgress.initial());
 
   // 6. Sync Order: Strict 18 Tables Dependency Order
   static const List<String> _syncableTables = [
@@ -217,7 +265,8 @@ class SyncService {
 
     final deviceId = await DatabaseHelper.instance.getOrCreateDeviceId();
 
-    for (final item in pendingItems) {
+    for (int i = 0; i < pendingItems.length; i++) {
+      final item = pendingItems[i];
       final int queueId = item['id'] as int;
       final String table = item['table_name'] as String;
       final int recordId = item['record_id'] as int;
@@ -225,6 +274,16 @@ class SyncService {
       final String op = item['operation'] as String;
       final String? payloadStr = item['payload'] as String?;
       final int retryCount = item['retry_count'] as int? ?? 0;
+
+      final double pct = ((i + 1) / pendingItems.length).clamp(0.0, 1.0);
+      migrationProgressNotifier.value = migrationProgressNotifier.value.copyWith(
+        currentTable: table,
+        processedRows: i + 1,
+        totalRows: pendingItems.length,
+        percentage: pct,
+        isMigrating: true,
+        isCompleted: false,
+      );
 
       if (retryCount >= 5) continue;
 
@@ -280,7 +339,7 @@ class SyncService {
             if (remoteId != null && remoteId.isNotEmpty) {
               final result = await RemoteClinicRepository.instance.updateRecord(
                 table: table,
-                remoteId: remoteId!,
+                remoteId: remoteId,
                 data: remotePayload,
               );
               result.fold(
@@ -294,7 +353,7 @@ class SyncService {
             if (remoteId != null && remoteId.isNotEmpty) {
               final result = await RemoteClinicRepository.instance.softDeleteRecord(
                 table: table,
-                remoteId: remoteId!,
+                remoteId: remoteId,
               );
               result.fold(
                 (failure) => throw Exception(failure.message),
@@ -328,6 +387,12 @@ class SyncService {
         );
       }
     }
+
+    migrationProgressNotifier.value = migrationProgressNotifier.value.copyWith(
+      isCompleted: true,
+      isMigrating: false,
+      percentage: 1.0,
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

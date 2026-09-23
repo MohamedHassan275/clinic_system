@@ -6,6 +6,8 @@ import 'core/di/service_locator.dart';
 import 'core/theme/app_theme.dart';
 import 'modules/splash/view/splash_screen.dart';
 
+import 'core/sync/sync_service.dart';
+
 void main() async {
   // 1. ضمان تهيئة Flutter Bindings أولاً
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +26,15 @@ void main() async {
   // 3. تهيئة حقن الخدمات Service Locator
   await initServiceLocator();
 
-  // 4. تشغيل التطبيق
+  // 4. تهيئة وتطوير محرك المزامنة اللحظية خلف الكواليس
+  try {
+    SyncService.instance.init();
+    debugPrint('⚡ [SyncService]: Initialized background sync engine.');
+  } catch (e) {
+    debugPrint('🔴 [SyncService Error]: Failed to initialize SyncService: $e');
+  }
+
+  // 5. تشغيل التطبيق
   runApp(const ClinicManagementApp());
 }
 

@@ -12,9 +12,14 @@ import '../../modules/shift/data/repo/shift_repo.dart';
 import '../../modules/shift/view/shift_view_model.dart';
 import '../../modules/splash/view/splash_view_model.dart';
 
+import '../sync/sync_service.dart';
+
 final sl = GetIt.instance;
 
 Future<void> initServiceLocator() async {
+  // Services
+  sl.registerLazySingleton<SyncService>(() => SyncService.instance);
+
   // Repositories
   sl.registerLazySingleton<AuthRepo>(() => AuthRepoImpl());
   sl.registerLazySingleton<ShiftRepo>(() => ShiftRepoImpl());

@@ -6,6 +6,9 @@ import '../../../../core/di/service_locator.dart';
 import '../../../../core/enums/user_role.dart';
 import '../../../../core/responsive/responsive_layout.dart';
 import '../../../../core/security/session_manager.dart';
+import '../../../../core/sync/sync_service.dart';
+import '../../../../core/sync/widgets/migration_progress_dialog.dart';
+import '../../../../core/sync/widgets/sync_status_indicator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../auth/view/login_screen.dart';
 import '../../clinic/data/cubit/clinic_cubit.dart';
@@ -33,6 +36,7 @@ class ClinicMainShell extends StatefulWidget {
 class _ClinicMainShellState extends State<ClinicMainShell> {
   late final MainShellViewModel _viewModel;
   late final ClinicCubit _clinicCubit;
+  bool _migrationDialogShown = false;
 
   @override
   void initState() {
@@ -41,13 +45,43 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
     _viewModel = sl<MainShellViewModel>()..updateRefresh(() {
       if (mounted) setState(() {});
     });
+
+    SyncService.instance.migrationProgressNotifier.addListener(_handleMigrationProgressChange);
   }
 
   @override
   void dispose() {
+    SyncService.instance.migrationProgressNotifier.removeListener(_handleMigrationProgressChange);
     _clinicCubit.close();
     _viewModel.dispose();
     super.dispose();
+  }
+
+  void _handleMigrationProgressChange() {
+    if (!mounted) return;
+    final progress = SyncService.instance.migrationProgressNotifier.value;
+
+    if (progress.isMigrating && !_migrationDialogShown) {
+      _migrationDialogShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const MigrationProgressDialog(),
+        ).then((_) {
+          _migrationDialogShown = false;
+        });
+      });
+    } else if (!progress.isMigrating && progress.isCompleted && _migrationDialogShown) {
+      _migrationDialogShown = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (Navigator.of(context, rootNavigator: true).canPop()) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      });
+    }
   }
 
   void _switchPortal(UserRole mode) {
@@ -197,65 +231,69 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
             },
             child: Directionality(
               textDirection: TextDirection.rtl,
-            child: ResponsiveLayout(
-              // Mobile Layout (< 600px)
-              mobile: Scaffold(
-                appBar: AppBar(
-                  title: Text(
-                    allowedItems.isNotEmpty ? allowedItems[validIndex].title : 'نظام العيادات',
+              child: ResponsiveLayout(
+                // Mobile Layout (< 600px)
+                mobile: Scaffold(
+                  appBar: AppBar(
+                    title: Text(
+                      allowedItems.isNotEmpty ? allowedItems[validIndex].title : 'نظام العيادات',
+                    ),
+                    centerTitle: false,
+                    actions: const [
+                      SyncStatusIndicator(),
+                      SizedBox(width: 8),
+                    ],
                   ),
-                  centerTitle: false,
+                  endDrawer: Drawer(
+                    child: _buildSidebarContent(allowedItems, validIndex, isDesktop: false),
+                  ),
+                  body: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: _getScreenWidget(currentKey),
+                  ),
                 ),
-                endDrawer: Drawer(
-                  child: _buildSidebarContent(allowedItems, validIndex, isDesktop: false),
-                ),
-                body: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: _getScreenWidget(currentKey),
-                ),
-              ),
 
-              // Tablet Layout (600px - 1023px)
-              tablet: Scaffold(
-                body: Row(
-                  children: [
-                    SizedBox(
-                      width: 220,
-                      child: _buildSidebarContent(allowedItems, validIndex, isDesktop: true, isCompact: true),
-                    ),
-                    const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: _getScreenWidget(currentKey),
+                // Tablet Layout (600px - 1023px)
+                tablet: Scaffold(
+                  body: Row(
+                    children: [
+                      SizedBox(
+                        width: 220,
+                        child: _buildSidebarContent(allowedItems, validIndex, isDesktop: true, isCompact: true),
                       ),
-                    ),
-                  ],
+                      const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: _getScreenWidget(currentKey),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
 
-              // Desktop Layout (>= 1024px)
-              desktop: Scaffold(
-                body: Row(
-                  children: [
-                    SizedBox(
-                      width: 270,
-                      child: _buildSidebarContent(allowedItems, validIndex, isDesktop: true),
-                    ),
-                    const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: _getScreenWidget(currentKey),
+                // Desktop Layout (>= 1024px)
+                desktop: Scaffold(
+                  body: Row(
+                    children: [
+                      SizedBox(
+                        width: 270,
+                        child: _buildSidebarContent(allowedItems, validIndex, isDesktop: true),
                       ),
-                    ),
-                  ],
+                      const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: _getScreenWidget(currentKey),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
       ),
     );
   }
@@ -310,6 +348,7 @@ class _ClinicMainShellState extends State<ClinicMainShell> {
                         ],
                       ),
                     ),
+                    const SyncStatusIndicator(),
                   ],
                 ),
                 const SizedBox(height: 16),
