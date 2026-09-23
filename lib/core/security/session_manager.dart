@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../common/error_handler/app_logger.dart';
 import '../database/database_helper.dart';
+import '../sync/sync_service.dart';
 import 'secure_storage_service.dart';
 
 /// Secure Session Manager providing encrypted session storage,
@@ -38,6 +39,7 @@ class SessionManager {
     if (_currentUser != null) {
       _currentUser!['is_online_mode'] = isOnline;
     }
+    SyncService.instance.setSyncEnabled(isOnline);
   }
 
   /// Initializes persistent encrypted session from SecureStorageService on app startup
@@ -55,6 +57,8 @@ class SessionManager {
         }
 
         _currentUser = user;
+        _isOnlineMode = user['is_online_mode'] as bool? ?? false;
+        SyncService.instance.setSyncEnabled(_isOnlineMode);
         _parsePermissions(user);
         final now = DateTime.now();
         _lastActivityTime = now;
