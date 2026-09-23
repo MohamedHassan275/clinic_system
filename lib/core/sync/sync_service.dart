@@ -458,12 +458,27 @@ class SyncService {
     await setGlobalLastPullAt(DateTime.now());
   }
 
+  /// Encodes Dart bool, Map, and List types into SQLite compatible types (int, String)
+  Map<String, dynamic> _sanitizeRowForSqlite(Map<String, dynamic> row) {
+    final Map<String, dynamic> sanitized = {};
+    row.forEach((key, value) {
+      if (value is bool) {
+        sanitized[key] = value ? 1 : 0;
+      } else if (value is Map || value is List) {
+        sanitized[key] = jsonEncode(value);
+      } else {
+        sanitized[key] = value;
+      }
+    });
+    return sanitized;
+  }
+
   /// Upserts remote row into local SQLite with Last-Write-Wins (LWW) conflict resolution by remote_id
   Future<void> _upsertLocal(Database db, String table, Map<String, dynamic> remoteRow, {bool isInitialMigration = false}) async {
     final String? remoteId = remoteRow['id'] as String?;
     if (remoteId == null || remoteId.isEmpty) return;
 
-    final Map<String, dynamic> localRow = Map<String, dynamic>.from(remoteRow);
+    final Map<String, dynamic> localRow = _sanitizeRowForSqlite(remoteRow);
 
     localRow['sync_status'] = 'synced';
 

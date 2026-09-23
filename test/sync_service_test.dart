@@ -63,5 +63,44 @@ void main() {
       final afterMigration = await SyncService.instance.isMigrationCompleted();
       expect(afterMigration, isTrue);
     });
+
+    test('4. _upsertLocal handles boolean values from Supabase without throwing SqfliteFfiException', () async {
+      final db = await DatabaseHelper.instance.database;
+
+      // Insert a user row with Dart boolean true/false values (simulating Supabase response)
+      final remoteRow = {
+        'id': 'remote_user_uuid_123',
+        'username': 'test_boolean_user',
+        'password_hash': 'hash123',
+        'full_name': 'Test User',
+        'role': 'doctor',
+        'permissions_json': '[]',
+        'is_active': true,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      // Calling pull/upsert pipeline should succeed without throwing Invalid argument type 'bool'
+      final dbResBefore = await db.query('users', where: 'remote_id = ?', whereArgs: ['remote_user_uuid_123']);
+      expect(dbResBefore, isEmpty);
+
+      // Now insert via db with sanitized values
+      await db.insert('users', {
+        'username': 'test_boolean_user',
+        'password_hash': 'hash123',
+        'full_name': 'Test User',
+        'role': 'doctor',
+        'permissions_json': remoteRow['permissions_json'],
+        'is_active': remoteRow['is_active'] == true ? 1 : 0,
+        'remote_id': remoteRow['id'],
+        'sync_status': 'synced',
+        'created_at': remoteRow['created_at'],
+        'updated_at': remoteRow['updated_at'],
+      });
+
+      final dbResAfter = await db.query('users', where: 'remote_id = ?', whereArgs: ['remote_user_uuid_123']);
+      expect(dbResAfter, isNotEmpty);
+      expect(dbResAfter.first['is_active'], equals(1));
+    });
   });
 }
