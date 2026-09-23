@@ -15,13 +15,13 @@ class LoginViewModel extends BaseViewModel {
 
   void togglePasswordVisibility() {
     isPasswordVisible = !isPasswordVisible;
-    notifyListeners();
+    refresh();
   }
 
   void toggleOnlineMode(bool value) {
     isOnlineMode = value;
     SessionManager.instance.setOnlineMode(value);
-    notifyListeners();
+    refresh();
   }
 
   Future<void> submitLogin({

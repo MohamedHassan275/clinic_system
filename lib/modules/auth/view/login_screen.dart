@@ -246,58 +246,66 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 16),
           // Online / Offline Toggle Switch Container (#FF6B00 Accent Color)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: _viewModel.isOnlineMode
-                  ? const Color(0xFFFF6B00).withValues(alpha: 0.08)
-                  : AppColors.background,
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _viewModel.isOnlineMode
-                    ? const Color(0xFFFF6B00)
-                    : AppColors.border,
-                width: 1.5,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _viewModel.isOnlineMode ? Icons.cloud_sync_rounded : Icons.wifi_off_rounded,
-                  color: _viewModel.isOnlineMode ? const Color(0xFFFF6B00) : AppColors.textSecondary,
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _viewModel.isOnlineMode ? 'Online (أونلاين) 🌐' : 'Offline (أوفلاين) 📴',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: _viewModel.isOnlineMode ? const Color(0xFFFF6B00) : AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _viewModel.isOnlineMode
-                            ? 'المزامنة السحابية عبر Supabase'
-                            : 'العمل السريع على الداتابيز المحلية (SQLite)',
-                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                      ),
-                    ],
+              onTap: () => _viewModel.toggleOnlineMode(!_viewModel.isOnlineMode),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: _viewModel.isOnlineMode
+                      ? const Color(0xFFFF6B00).withValues(alpha: 0.08)
+                      : AppColors.background,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _viewModel.isOnlineMode
+                        ? const Color(0xFFFF6B00)
+                        : AppColors.border,
+                    width: 1.5,
                   ),
                 ),
-                Switch(
-                  value: _viewModel.isOnlineMode,
-                  activeThumbColor: const Color(0xFFFF6B00),
-                  activeTrackColor: const Color(0xFFFF6B00).withValues(alpha: 0.3),
-                  inactiveThumbColor: AppColors.textSecondary,
-                  onChanged: (val) => _viewModel.toggleOnlineMode(val),
+                child: Row(
+                  children: [
+                    Icon(
+                      _viewModel.isOnlineMode ? Icons.cloud_sync_rounded : Icons.wifi_off_rounded,
+                      color: _viewModel.isOnlineMode ? const Color(0xFFFF6B00) : AppColors.textSecondary,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _viewModel.isOnlineMode ? 'Online (أونلاين) 🌐' : 'Offline (أوفلاين) 📴',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: _viewModel.isOnlineMode ? const Color(0xFFFF6B00) : AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _viewModel.isOnlineMode
+                                ? 'المزامنة السحابية عبر Supabase'
+                                : 'العمل السريع على الداتابيز المحلية (SQLite)',
+                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _viewModel.isOnlineMode,
+                      activeThumbColor: const Color(0xFFFF6B00),
+                      activeTrackColor: const Color(0xFFFF6B00).withValues(alpha: 0.3),
+                      inactiveThumbColor: AppColors.textSecondary,
+                      onChanged: (val) => _viewModel.toggleOnlineMode(val),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 12),

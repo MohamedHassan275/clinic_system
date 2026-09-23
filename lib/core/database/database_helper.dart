@@ -1053,18 +1053,37 @@ class DatabaseHelper {
 
   static Future<String> getDeviceId(DatabaseExecutor executor) async {
     if (_cachedDeviceId != null) return _cachedDeviceId!;
-    final res = await executor.query('settings', where: 'key = ?', whereArgs: ['device_id']);
-    if (res.isNotEmpty && res.first['value'] != null) {
-      _cachedDeviceId = res.first['value'] as String;
-      return _cachedDeviceId!;
-    }
+    try {
+      final res = await executor.query('settings', where: 'key = ?', whereArgs: ['device_id']);
+      if (res.isNotEmpty && res.first['value'] != null) {
+        _cachedDeviceId = res.first['value'] as String;
+        return _cachedDeviceId!;
+      }
+    } catch (_) {}
+
     final newId = 'device_${DateTime.now().millisecondsSinceEpoch}_${(1000 + (DateTime.now().microsecondsSinceEpoch % 9000))}';
-    await executor.insert('settings', {
-      'clinic_id': 1,
-      'key': 'device_id',
-      'value': newId,
-      'updated_at': DateTime.now().toIso8601String(),
-    });
+    try {
+      final clinicCheck = await executor.query('clinics', where: 'id = ?', whereArgs: [1]);
+      if (clinicCheck.isEmpty) {
+        await executor.insert('clinics', {
+          'id': 1,
+          'name': 'العيادة الرئيسية',
+          'currency': 'EGP',
+          'subscription_plan': 'starter',
+          'is_active': 1,
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
+      await executor.insert('settings', {
+        'clinic_id': 1,
+        'key': 'device_id',
+        'value': newId,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      AppLogger.info('Could not store device_id in settings table: $e');
+    }
     _cachedDeviceId = newId;
     return newId;
   }
