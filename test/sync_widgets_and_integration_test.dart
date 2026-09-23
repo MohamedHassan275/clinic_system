@@ -159,9 +159,10 @@ void main() {
               home: SyncStatusScreen(),
             ),
           );
-          await Future.delayed(const Duration(milliseconds: 300));
+          await Future.delayed(const Duration(milliseconds: 500));
         });
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
         expect(find.text('حالة المزامنة السحابية (Cloud Sync Monitor)'), findsOneWidget);
         expect(find.text('مزامنة الآن'), findsOneWidget);
@@ -170,28 +171,28 @@ void main() {
       });
 
       testWidgets('2. loads and renders recent sync log entries in data table', (tester) async {
-        final db = await DatabaseHelper.instance.database;
-
-        await db.insert('sync_log', {
-          'sync_time': '2026-09-23T10:00:00.000Z',
-          'table_name': 'patients',
-          'operation': 'INSERT',
-          'local_id': 1,
-          'remote_id': 'uuid-1234',
-          'status': 'success',
-          'details': 'Pushed test record',
-          'device_id': 'test-device',
-        });
-
         await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          await db.insert('sync_log', {
+            'sync_time': '2026-09-23T10:00:00.000Z',
+            'table_name': 'patients',
+            'operation': 'INSERT',
+            'local_id': 1,
+            'remote_id': 'uuid-1234',
+            'status': 'success',
+            'details': 'Pushed test record',
+            'device_id': 'test-device',
+          });
+
           await tester.pumpWidget(
             const MaterialApp(
               home: SyncStatusScreen(),
             ),
           );
-          await Future.delayed(const Duration(milliseconds: 300));
+          await Future.delayed(const Duration(milliseconds: 500));
         });
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
         expect(find.text('patients'), findsOneWidget);
         expect(find.text('Pushed test record'), findsOneWidget);
