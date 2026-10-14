@@ -1,3 +1,4 @@
+import 'package:clinic_system/core/enums/database_type.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:clinic_system/core/security/session_manager.dart';
 import 'package:clinic_system/modules/auth/view/login_view_model.dart';
@@ -31,13 +32,20 @@ void main() {
       final authCubit = AuthCubit(AuthRepoImpl());
       final viewModel = LoginViewModel(() {}, authCubit);
       expect(viewModel.isOnlineMode, isFalse);
+      expect(viewModel.databaseType, equals(DatabaseType.offline));
 
       viewModel.toggleOnlineMode(true);
       expect(viewModel.isOnlineMode, isTrue);
+      expect(viewModel.databaseType, equals(DatabaseType.online));
       expect(sessionManager.isOnlineMode, isTrue);
+
+      viewModel.setDatabaseType(DatabaseType.hybrid);
+      expect(viewModel.isOnlineMode, isTrue);
+      expect(viewModel.databaseType, equals(DatabaseType.hybrid));
 
       viewModel.toggleOnlineMode(false);
       expect(viewModel.isOnlineMode, isFalse);
+      expect(viewModel.databaseType, equals(DatabaseType.offline));
       expect(sessionManager.isOnlineMode, isFalse);
     });
   });

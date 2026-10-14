@@ -16,7 +16,7 @@ void main() async {
   try {
     await Supabase.initialize(
       url: SupabaseConfig.url,
-      anonKey: SupabaseConfig.anonKey,
+      publishableKey: SupabaseConfig.anonKey,
     );
     debugPrint('⚡ [Supabase]: Initialized successfully with URL: ${SupabaseConfig.url}');
   } catch (e) {

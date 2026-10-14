@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/enums/database_type.dart';
 import '../../../../core/enums/user_role.dart';
 import '../../../../core/security/session_manager.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -245,69 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
             validator: (v) => (v == null || v.isEmpty) ? 'يرجى إدخال كلمة المرور' : null,
           ),
           const SizedBox(height: 16),
-          // Online / Offline Toggle Switch Container (#FF6B00 Accent Color)
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _viewModel.toggleOnlineMode(!_viewModel.isOnlineMode),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _viewModel.isOnlineMode
-                      ? const Color(0xFFFF6B00).withValues(alpha: 0.08)
-                      : AppColors.background,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _viewModel.isOnlineMode
-                        ? const Color(0xFFFF6B00)
-                        : AppColors.border,
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _viewModel.isOnlineMode ? Icons.cloud_sync_rounded : Icons.wifi_off_rounded,
-                      color: _viewModel.isOnlineMode ? const Color(0xFFFF6B00) : AppColors.textSecondary,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _viewModel.isOnlineMode ? 'Online (أونلاين) 🌐' : 'Offline (أوفلاين) 📴',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: _viewModel.isOnlineMode ? const Color(0xFFFF6B00) : AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _viewModel.isOnlineMode
-                                ? 'المزامنة السحابية عبر Supabase'
-                                : 'العمل السريع على الداتابيز المحلية (SQLite)',
-                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: _viewModel.isOnlineMode,
-                      activeThumbColor: const Color(0xFFFF6B00),
-                      activeTrackColor: const Color(0xFFFF6B00).withValues(alpha: 0.3),
-                      inactiveThumbColor: AppColors.textSecondary,
-                      onChanged: (val) => _viewModel.toggleOnlineMode(val),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          _buildDatabaseTypeSelector(),
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerLeft,
@@ -334,6 +273,112 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildDatabaseTypeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.storage_rounded, size: 16, color: AppColors.textSecondary),
+            SizedBox(width: 6),
+            Text(
+              'وضع التشغيل وقاعدة البيانات',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<DatabaseType>(
+            segments: const [
+              ButtonSegment<DatabaseType>(
+                value: DatabaseType.offline,
+                icon: Icon(Icons.wifi_off_rounded, size: 18),
+                label: Text('Offline'),
+              ),
+              ButtonSegment<DatabaseType>(
+                value: DatabaseType.online,
+                icon: Icon(Icons.cloud_outlined, size: 18),
+                label: Text('Online'),
+              ),
+              ButtonSegment<DatabaseType>(
+                value: DatabaseType.hybrid,
+                icon: Icon(Icons.sync_rounded, size: 18),
+                label: Text('Hybrid'),
+              ),
+            ],
+            selected: {_viewModel.databaseType},
+            onSelectionChanged: (newSelection) {
+              if (newSelection.isNotEmpty) {
+                _viewModel.setDatabaseType(newSelection.first);
+              }
+            },
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.primaryLight;
+                }
+                return Colors.transparent;
+              }),
+              foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.primary;
+                }
+                return AppColors.textSecondary;
+              }),
+              side: WidgetStateProperty.all(
+                const BorderSide(color: AppColors.border),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _getDatabaseTypeIcon(_viewModel.databaseType),
+                size: 14,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _viewModel.databaseType.description,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getDatabaseTypeIcon(DatabaseType type) {
+    switch (type) {
+      case DatabaseType.offline:
+        return Icons.save_alt_rounded;
+      case DatabaseType.online:
+        return Icons.cloud_done_rounded;
+      case DatabaseType.hybrid:
+        return Icons.sync_rounded;
+    }
   }
 
   Widget _buildSubmitButton() {

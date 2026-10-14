@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/common/error_handler/failure.dart';
+import '../../../../core/enums/database_type.dart';
 import '../../../shared/cubit/base_cubit.dart';
 import '../repo/auth_repo.dart';
 
@@ -15,10 +16,15 @@ class AuthCubit extends BaseCubit<AuthApiType> {
   Future<Either<Failure, Map<String, dynamic>>> login({
     required String username,
     required String password,
+    DatabaseType databaseType = DatabaseType.offline,
   }) async {
     return await fastFire(
       type: AuthApiType.login,
-      fun: () => _authRepo.login(username: username, password: password),
+      fun: () => _authRepo.login(
+        username: username,
+        password: password,
+        databaseType: databaseType,
+      ),
       onSuccess: (user) {
         authenticatedUser = user;
       },
